@@ -3,17 +3,20 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Sequence
 
-from common import ANKI_EXISTING_NOTE_CHOICES, DUPLICATE_HANDLING_CHOICES
+from common import ANKI_EXISTING_NOTE_CHOICES, DUPLICATE_HANDLING_DISPLAY_CHOICES
 
 if TYPE_CHECKING:
     import tkinter as tk
+    import tkinter.font as tkfont
     from tkinter import filedialog, messagebox, ttk
 else:
     try:
         import tkinter as tk
+        import tkinter.font as tkfont
         from tkinter import filedialog, messagebox, ttk
     except ImportError:
         tk = None
+        tkfont = None
         filedialog = None
         messagebox = None
         ttk = None
@@ -137,68 +140,263 @@ def attach_tooltip(widget: object, text: str) -> HoverTooltip:
     return tooltip
 
 
+def measure_container_width(container: object) -> int:
+    try:
+        container.update_idletasks()
+    except Exception:
+        pass
+
+    for method_name in ("winfo_width", "winfo_reqwidth"):
+        try:
+            width = int(getattr(container, method_name)())
+        except Exception:
+            continue
+        if width > 1:
+            return width
+
+    return 0
+
+
+def bind_chip_container_resize(container: object) -> None:
+    if getattr(container, "_chip_resize_bound", False):
+        return
+
+    def rerender(event: object) -> None:
+        state = getattr(container, "_chip_render_state", None)
+        if state is None or getattr(container, "_chip_render_in_progress", False):
+            return
+
+        event_width = getattr(event, "width", 0)
+        if not isinstance(event_width, int) or event_width <= 1:
+            return
+
+        if event_width == getattr(container, "_chip_last_width", None):
+            return
+
+        setattr(container, "_chip_last_width", event_width)
+        render_tag_chips(
+            container,
+            state["values"],
+            state["on_remove"],
+            disabled=state["disabled"],
+            empty_text=state["empty_text"],
+        )
+
+    try:
+        container.bind("<Configure>", rerender, add="+")
+        setattr(container, "_chip_resize_bound", True)
+    except Exception:
+        pass
+
+
+def render_tag_chips(
+    container: object,
+    values: Sequence[str],
+    on_remove: Callable[[str], None],
+    *,
+    disabled: bool = False,
+    empty_text: str = "No tags selected",
+) -> list[object]:
+    if tk is None:
+        raise RuntimeError("Tkinter is not available in this Python installation.")
+
+    bind_chip_container_resize(container)
+    setattr(
+        container,
+        "_chip_render_state",
+        {
+            "values": tuple(values),
+            "on_remove": on_remove,
+            "disabled": disabled,
+            "empty_text": empty_text,
+        },
+    )
+    setattr(container, "_chip_render_in_progress", True)
+    existing_children = container.winfo_children()
+    if not isinstance(existing_children, (list, tuple)):
+        setattr(container, "_chip_render_in_progress", False)
+        return []
+
+    try:
+        for child in existing_children:
+            child.destroy()
+
+        tray_background = "#2a2a2a"
+        chip_background = "#343434"
+        chip_border = "#4a4a4a"
+        remove_buttons: list[object] = []
+        if not values:
+            placeholder = tk.Label(
+                container,
+                text=empty_text,
+                background=tray_background,
+                foreground="#a4a4a4",
+                padx=2,
+                pady=2,
+            )
+            placeholder.grid(row=0, column=0, sticky="w")
+            return remove_buttons
+
+        available_width = max(measure_container_width(container) - 12, 0)
+        row = 0
+        column = 0
+        row_width = 0
+        chip_font = None
+        remove_font = None
+        if tkfont is not None:
+            chip_font = tkfont.nametofont("TkDefaultFont").copy()
+            chip_font.configure(size=max(chip_font.cget("size") - 1, 9))
+            remove_font = tkfont.nametofont("TkDefaultFont").copy()
+            remove_font.configure(size=max(remove_font.cget("size") - 2, 8))
+        for value in values:
+            chip = tk.Frame(
+                container,
+                background=chip_background,
+                borderwidth=1,
+                relief="solid",
+                highlightthickness=0,
+                highlightbackground=chip_border,
+            )
+            chip.grid(row=row, column=column, sticky="w", padx=(0, 6), pady=2)
+
+            label = tk.Label(
+                chip,
+                text=value,
+                background=chip_background,
+                foreground="#ededed",
+                padx=8,
+                pady=2,
+                font=chip_font,
+            )
+            label.pack(side="left")
+
+            remove_button = tk.Label(
+                chip,
+                text="×",
+                background=chip_background,
+                foreground="#939393",
+                cursor="" if disabled else "hand2",
+                padx=3,
+                pady=2,
+                font=remove_font,
+            )
+            if not disabled:
+                remove_button.bind("<Button-1>", lambda _event, selected=value: on_remove(selected))
+                remove_button.bind(
+                    "<Enter>",
+                    lambda _event, widget=remove_button: widget.configure(foreground="#bebebe"),
+                )
+                remove_button.bind(
+                    "<Leave>",
+                    lambda _event, widget=remove_button: widget.configure(foreground="#939393"),
+                )
+            remove_button.pack(side="left")
+            remove_buttons.append(remove_button)
+
+            try:
+                chip.update_idletasks()
+                chip_width = chip.winfo_reqwidth() + 6
+            except Exception:
+                chip_width = 0
+
+            if column > 0 and available_width > 0 and row_width + chip_width > available_width:
+                row += 1
+                column = 0
+                row_width = 0
+
+            chip.grid(row=row, column=column, sticky="w", padx=(0, 6), pady=2)
+
+            row_width += chip_width
+            column += 1
+
+        return remove_buttons
+    finally:
+        setattr(container, "_chip_last_width", measure_container_width(container))
+        setattr(container, "_chip_render_in_progress", False)
+
+
 def build_main_window(app: object) -> None:
     if tk is None or ttk is None:
         raise RuntimeError("Tkinter is not available in this Python installation.")
 
     root = app.root
     style = ttk.Style(root)
+    if tkfont is not None:
+        section_font = tkfont.nametofont("TkDefaultFont").copy()
+        section_font.configure(weight="bold")
+        field_font = tkfont.nametofont("TkDefaultFont").copy()
+        field_font.configure(weight="normal")
+        log_font = tkfont.nametofont("TkTextFont").copy()
+        log_font.configure(size=max(log_font.cget("size") - 1, 9))
+        style.configure("TLabelframe.Label", font=section_font)
+        style.configure("FieldLabel.TLabel", font=field_font)
+    else:
+        log_font = None
     style.configure("AnkiOff.TLabel", foreground="#9a9a9a")
     style.configure("AnkiPending.TLabel", foreground="#d4b25f")
     style.configure("AnkiConnected.TLabel", foreground="#8ccf7e")
     style.configure("AnkiError.TLabel", foreground="#d97a7a")
 
-    main = ttk.Frame(root, padding=16)
+    main = ttk.Frame(root, padding=10)
     main.grid(row=0, column=0, sticky="nsew")
     root.columnconfigure(0, weight=1)
     root.rowconfigure(0, weight=1)
 
     main.columnconfigure(0, weight=1)
-    main.rowconfigure(4, weight=1)
 
-    source = ttk.LabelFrame(main, text="Source", padding=12)
-    source.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+    source = ttk.LabelFrame(main, text="Source", padding=8)
+    source.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+    source.columnconfigure(0, minsize=72)
     source.columnconfigure(1, weight=1)
 
-    vault_label = ttk.Label(source, text="Vault")
+    vault_label = ttk.Label(source, text="Vault", style="FieldLabel.TLabel")
     vault_label.grid(row=0, column=0, sticky="w")
     attach_tooltip(
         vault_label,
         "Choose the root folder of the Obsidian vault you want to scan. "
         "The app will search this vault recursively for Markdown notes, then apply any tag and folder filters you selected.",
     )
-    ttk.Entry(source, textvariable=app.vault_var).grid(row=0, column=1, sticky="ew", padx=(12, 12))
+    ttk.Entry(source, textvariable=app.vault_var).grid(row=0, column=1, sticky="ew", padx=(10, 10))
     ttk.Button(source, text="Browse…", command=app.choose_vault).grid(row=0, column=2, sticky="ew")
 
+    output_label_frame = ttk.Frame(source)
+    output_label_frame.grid(row=1, column=0, sticky="w", pady=(4, 0))
     app.output_tsv_checkbutton = ttk.Checkbutton(
-        source,
-        text="Output TSV",
+        output_label_frame,
+        text="",
         variable=app.write_tsv_var,
         command=app.sync_output_option_state,
+        width=0,
     )
-    app.output_tsv_checkbutton.grid(row=1, column=0, sticky="w", pady=(8, 0))
+    app.output_tsv_checkbutton.grid(row=0, column=0, sticky="w")
+    output_label = ttk.Label(output_label_frame, text="Output TSV", style="FieldLabel.TLabel")
+    output_label.grid(row=0, column=1, sticky="w", padx=(4, 0))
+    attach_tooltip(
+        output_label,
+        "Save a TSV export as a backup or import it into Anki manually. "
+        "This is optional when direct sync is enabled, and it is often the faster option for very large first-time loads.",
+    )
     attach_tooltip(
         app.output_tsv_checkbutton,
-        "Save a tab-separated export file that can be imported into Anki manually. "
-        "This is optional if you only want direct sync, but it is useful as a backup and is often the faster option for very large first-time loads.",
+        "Turn TSV export on or off for this run.",
     )
     app.output_entry = ttk.Entry(source, textvariable=app.output_var)
-    app.output_entry.grid(row=1, column=1, sticky="ew", padx=(12, 12), pady=(8, 0))
+    app.output_entry.grid(row=1, column=1, sticky="ew", padx=(10, 10), pady=(4, 0))
     app.output_button = ttk.Button(source, text="Save As…", command=app.choose_output)
-    app.output_button.grid(row=1, column=2, sticky="ew", pady=(8, 0))
+    app.output_button.grid(row=1, column=2, sticky="ew", pady=(4, 0))
 
-    tag_label = ttk.Label(source, text="Tags")
-    tag_label.grid(row=2, column=0, sticky="nw", pady=(8, 0))
+    tag_label = ttk.Label(source, text="Tags", style="FieldLabel.TLabel")
+    tag_label.grid(row=2, column=0, sticky="w", pady=(4, 0))
     attach_tooltip(
         tag_label,
-        "Include notes that match any selected tag. "
-        "You can choose more than one tag, and a note will be included if it has at least one of them.",
+        "Select one or more tags to scan for. "
+        "A note is included if it matches any selected tag.",
     )
-    tag_frame = ttk.Frame(source)
-    tag_frame.grid(row=2, column=1, sticky="ew", padx=(12, 12), pady=(8, 0))
-    tag_frame.columnconfigure(0, weight=1)
+    tag_picker_frame = ttk.Frame(source)
+    tag_picker_frame.grid(row=2, column=1, sticky="ew", padx=(10, 10), pady=(4, 0))
+    tag_picker_frame.columnconfigure(0, weight=1)
     app.tag_combobox = ttk.Combobox(
-        tag_frame,
+        tag_picker_frame,
         textvariable=app.tag_var,
         values=((app.tag_var.get(),) if app.tag_var.get() else ()),
     )
@@ -206,65 +404,44 @@ def build_main_window(app: object) -> None:
     app.tag_combobox.bind("<<ComboboxSelected>>", app.add_selected_tag)
     app.tag_combobox.bind("<Return>", app.add_selected_tag)
     app.tag_combobox.bind("<FocusOut>", app.add_selected_tag)
-    tag_list_frame = ttk.Frame(tag_frame)
-    tag_list_frame.grid(row=1, column=0, sticky="ew", pady=(6, 0))
-    tag_list_frame.columnconfigure(0, weight=1)
-    app.selected_tags_listbox = tk.Listbox(
-        tag_list_frame,
-        exportselection=False,
-        height=3,
-        selectmode="extended",
+    app.selected_tags_container = tk.Frame(
+        source,
+        background="#2a2a2a",
+        borderwidth=1,
+        relief="solid",
+        highlightthickness=0,
+        highlightbackground="#404040",
+        padx=6,
+        pady=4,
     )
-    app.selected_tags_listbox.grid(row=0, column=0, sticky="ew")
-    tag_scroll = ttk.Scrollbar(
-        tag_list_frame,
-        orient="vertical",
-        command=app.selected_tags_listbox.yview,
-    )
-    tag_scroll.grid(row=0, column=1, sticky="ns")
-    app.selected_tags_listbox.configure(yscrollcommand=tag_scroll.set)
-    tag_button_frame = ttk.Frame(source)
-    tag_button_frame.grid(row=2, column=2, sticky="new", pady=(8, 0))
-    tag_button_frame.columnconfigure(0, weight=1)
-    app.tag_scan_button = ttk.Button(tag_button_frame, text="Find Tags…", command=app.scan_vault_tags)
-    app.tag_scan_button.grid(row=0, column=0, sticky="ew")
-    app.tag_remove_button = ttk.Button(tag_button_frame, text="Remove", command=app.remove_selected_tags)
-    app.tag_remove_button.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+    app.selected_tags_container.grid(row=3, column=1, sticky="ew", padx=(10, 10), pady=(4, 0))
+    app.tag_scan_button = ttk.Button(source, text="Find Tags…", command=app.scan_vault_tags)
+    app.tag_scan_button.grid(row=2, column=2, sticky="ew", pady=(4, 0))
 
-    folder_label = ttk.Label(source, text="Folders")
-    folder_label.grid(row=3, column=0, sticky="nw", pady=(8, 0))
+    folder_label = ttk.Label(source, text="Folders", style="FieldLabel.TLabel")
+    folder_label.grid(row=4, column=0, sticky="nw", pady=(12, 0))
     attach_tooltip(
         folder_label,
-        "Limit the scan to specific folders inside the vault. "
+        "Optionally limit the scan to specific folders inside the vault. "
         "Leave this empty to scan the whole vault.",
     )
-    folder_filter_frame = ttk.Frame(source)
-    folder_filter_frame.grid(row=3, column=1, sticky="ew", padx=(12, 12), pady=(8, 0))
-    folder_filter_frame.columnconfigure(0, weight=1)
-
-    app.folder_filters_listbox = tk.Listbox(folder_filter_frame, exportselection=False, height=4)
-    app.folder_filters_listbox.grid(row=0, column=0, sticky="ew")
-    folder_filter_scroll = ttk.Scrollbar(
-        folder_filter_frame,
-        orient="vertical",
-        command=app.folder_filters_listbox.yview,
+    app.folder_filters_container = tk.Frame(
+        source,
+        background="#2a2a2a",
+        borderwidth=1,
+        relief="solid",
+        highlightthickness=0,
+        highlightbackground="#404040",
+        padx=6,
+        pady=4,
     )
-    folder_filter_scroll.grid(row=0, column=1, sticky="ns")
-    app.folder_filters_listbox.configure(yscrollcommand=folder_filter_scroll.set)
+    app.folder_filters_container.grid(row=4, column=1, sticky="ew", padx=(10, 10), pady=(4, 0))
 
-    folder_filter_buttons = ttk.Frame(source)
-    folder_filter_buttons.grid(row=3, column=2, sticky="ew", pady=(8, 0))
-    folder_filter_buttons.columnconfigure(0, weight=1)
-    ttk.Button(folder_filter_buttons, text="Add Folder…", command=app.add_folder_filter).grid(row=0, column=0, sticky="ew")
-    ttk.Button(folder_filter_buttons, text="Remove", command=app.remove_selected_folder_filters).grid(
-        row=1,
-        column=0,
-        sticky="ew",
-        pady=(8, 0),
-    )
+    app.add_folder_button = ttk.Button(source, text="Add Folder…", command=app.add_folder_filter)
+    app.add_folder_button.grid(row=4, column=2, sticky="ew", pady=(4, 0))
 
-    formatting = ttk.LabelFrame(main, text="Card Formatting", padding=12)
-    formatting.grid(row=1, column=0, sticky="ew", pady=(0, 12))
+    formatting = ttk.LabelFrame(main, text="Card Formatting", padding=8)
+    formatting.grid(row=1, column=0, sticky="ew", pady=(0, 8))
     formatting.columnconfigure(0, weight=1)
     formatting.columnconfigure(1, weight=1)
 
@@ -300,7 +477,7 @@ def build_main_window(app: object) -> None:
         row=1,
         column=0,
         sticky="w",
-        pady=(8, 0),
+        pady=(4, 0),
     )
     attach_tooltip(
         skip_empty_checkbutton,
@@ -308,30 +485,40 @@ def build_main_window(app: object) -> None:
         "This helps avoid blank or nearly blank cards.",
     )
     duplicate_frame = ttk.Frame(formatting)
-    duplicate_frame.grid(row=1, column=1, sticky="w", pady=(8, 0))
-    duplicate_label = ttk.Label(duplicate_frame, text="Duplicates")
+    duplicate_frame.grid(row=1, column=1, sticky="w", pady=(4, 0))
+    duplicate_label = ttk.Label(duplicate_frame, text="Duplicates", style="FieldLabel.TLabel")
     duplicate_label.grid(row=0, column=0, sticky="w")
     attach_tooltip(
         duplicate_label,
         "Choose what to do when multiple Obsidian notes would produce the same card front. "
-        "Skip keeps only the first matching note. "
-        "Suffix keeps all duplicates and renames them with folder labels. "
-        "Error stops before export or sync until the duplicates are resolved.",
+        "Stop pauses before export or sync so you can review the duplicates. "
+        "Keep first uses the first matching note and ignores the rest. "
+        "Rename duplicates keeps them all and adds folder labels to make each front unique.",
     )
     app.duplicate_handling_combobox = ttk.Combobox(
         duplicate_frame,
-        textvariable=app.duplicate_handling_var,
-        values=DUPLICATE_HANDLING_CHOICES,
+        textvariable=app.duplicate_handling_display_var,
+        values=DUPLICATE_HANDLING_DISPLAY_CHOICES,
         state="readonly",
-        width=10,
+        width=18,
     )
     app.duplicate_handling_combobox.grid(row=0, column=1, sticky="w", padx=(8, 0))
+    app.duplicate_handling_combobox.bind("<<ComboboxSelected>>", app.on_duplicate_handling_change)
+    attach_tooltip(
+        app.duplicate_handling_combobox,
+        "Choose what to do when multiple Obsidian notes would produce the same card front. "
+        "Stop pauses before export or sync so you can review the duplicates. "
+        "Keep first uses the first matching note and ignores the rest. "
+        "Rename duplicates keeps them all and adds folder labels to make each front unique.",
+    )
     app.sync_output_option_state()
     app.sync_html_option_state()
 
-    anki_options = ttk.LabelFrame(main, text="Anki Sync", padding=12)
-    anki_options.grid(row=2, column=0, sticky="ew", pady=(0, 12))
+    anki_options = ttk.LabelFrame(main, text="Anki Sync", padding=8)
+    anki_options.grid(row=2, column=0, sticky="ew", pady=(0, 8))
+    anki_options.columnconfigure(0, minsize=88)
     anki_options.columnconfigure(1, weight=1)
+    anki_options.columnconfigure(2, minsize=88)
     anki_options.columnconfigure(3, weight=1)
 
     app.sync_to_anki_checkbutton = ttk.Checkbutton(
@@ -358,8 +545,8 @@ def build_main_window(app: object) -> None:
         "If this says the connection failed, make sure Anki is open and the AnkiConnect add-on is installed.",
     )
 
-    deck_label = ttk.Label(anki_options, text="Deck")
-    deck_label.grid(row=1, column=0, sticky="w", pady=(8, 0))
+    deck_label = ttk.Label(anki_options, text="Deck", style="FieldLabel.TLabel")
+    deck_label.grid(row=1, column=0, sticky="w", pady=(4, 0))
     attach_tooltip(
         deck_label,
         "The Anki deck where cards will be added or updated. "
@@ -370,10 +557,10 @@ def build_main_window(app: object) -> None:
         textvariable=app.anki_deck_var,
         values=(app.anki_deck_var.get(),),
     )
-    app.anki_deck_combobox.grid(row=1, column=1, sticky="ew", padx=(12, 12), pady=(8, 0))
+    app.anki_deck_combobox.grid(row=1, column=1, sticky="ew", padx=(10, 10), pady=(4, 0))
 
-    note_type_label = ttk.Label(anki_options, text="Note type")
-    note_type_label.grid(row=1, column=2, sticky="w", pady=(8, 0))
+    note_type_label = ttk.Label(anki_options, text="Note type", style="FieldLabel.TLabel")
+    note_type_label.grid(row=1, column=2, sticky="w", pady=(4, 0))
     attach_tooltip(
         note_type_label,
         "The Anki note type to use for synced cards. "
@@ -384,7 +571,7 @@ def build_main_window(app: object) -> None:
         textvariable=app.anki_note_type_var,
         values=(app.anki_note_type_var.get(),),
     )
-    app.anki_note_type_combobox.grid(row=1, column=3, sticky="ew", pady=(8, 0))
+    app.anki_note_type_combobox.grid(row=1, column=3, sticky="ew", pady=(4, 0))
     app.anki_note_type_combobox.bind("<<ComboboxSelected>>", app.on_anki_note_type_change)
     app.anki_note_type_combobox.bind("<FocusOut>", app.on_anki_note_type_change)
     app.anki_note_type_combobox.bind("<Return>", app.on_anki_note_type_change)
@@ -401,12 +588,13 @@ def build_main_window(app: object) -> None:
         values=(app.anki_back_field_var.get(),),
     )
 
-    existing_notes_label = ttk.Label(anki_options, text="Existing notes")
-    existing_notes_label.grid(row=2, column=0, sticky="w", pady=(8, 0))
+    existing_notes_label = ttk.Label(anki_options, text="Existing notes", style="FieldLabel.TLabel")
+    existing_notes_label.grid(row=2, column=0, sticky="w", pady=(4, 0))
     attach_tooltip(
         existing_notes_label,
         "Choose what happens when Anki already has a note with the same front. "
-        "You can skip it or update the existing note with the latest Obsidian content.",
+        "Update refreshes the existing Anki note with the latest Obsidian content. "
+        "Skip leaves the existing Anki note unchanged.",
     )
     app.anki_existing_notes_combobox = ttk.Combobox(
         anki_options,
@@ -415,7 +603,7 @@ def build_main_window(app: object) -> None:
         state="readonly",
         width=10,
     )
-    app.anki_existing_notes_combobox.grid(row=2, column=1, sticky="w", padx=(12, 12), pady=(8, 0))
+    app.anki_existing_notes_combobox.grid(row=2, column=1, sticky="w", padx=(10, 10), pady=(4, 0))
 
     app.anki_connect_url_entry = ttk.Entry(anki_options, textvariable=app.anki_connect_url_var)
     app.anki_connect_url_entry.bind("<FocusOut>", app.on_anki_connect_url_change)
@@ -423,7 +611,7 @@ def build_main_window(app: object) -> None:
     app.sync_anki_option_state()
 
     actions = ttk.Frame(main)
-    actions.grid(row=3, column=0, sticky="ew", pady=(0, 12))
+    actions.grid(row=3, column=0, sticky="ew", pady=(0, 8))
     actions.columnconfigure(0, weight=1)
 
     app.reset_button = ttk.Button(actions, text="Reset Settings", command=app.reset_settings)
@@ -434,17 +622,38 @@ def build_main_window(app: object) -> None:
         text="Preview & Continue",
         command=app.start_preview,
         default="active",
+        width=18,
     )
     app.preview_button.grid(row=0, column=1, sticky="e")
 
-    output_frame = ttk.LabelFrame(main, text="Status", padding=12)
-    output_frame.grid(row=4, column=0, sticky="nsew")
-    output_frame.columnconfigure(0, weight=1)
-    output_frame.rowconfigure(1, weight=1)
+    status_frame = ttk.Frame(main)
+    status_frame.grid(row=4, column=0, sticky="ew")
+    status_frame.columnconfigure(0, weight=1)
 
-    ttk.Label(output_frame, textvariable=app.status_var).grid(row=0, column=0, sticky="w", pady=(0, 8))
-    app.log_widget = tk.Text(output_frame, height=10, wrap="word", state="disabled")
-    app.log_widget.grid(row=1, column=0, sticky="nsew")
+    ttk.Separator(status_frame, orient="horizontal").grid(row=0, column=0, sticky="ew", pady=(0, 6))
+
+    status_header = ttk.Frame(status_frame)
+    status_header.grid(row=1, column=0, sticky="ew")
+    status_header.columnconfigure(0, weight=1)
+    ttk.Label(status_header, textvariable=app.status_var).grid(row=0, column=0, sticky="w")
+    app.status_toggle_button = ttk.Button(
+        status_header,
+        textvariable=app.status_details_var,
+        command=app.toggle_status_details,
+    )
+    app.status_toggle_button.grid(row=0, column=1, sticky="e")
+    log_widget_kwargs = {
+        "height": 8,
+        "wrap": "word",
+        "state": "disabled",
+        "foreground": "#b9b9b9",
+        "insertbackground": "#b9b9b9",
+    }
+    if log_font is not None:
+        log_widget_kwargs["font"] = log_font
+    log_widget_kwargs["height"] = 6
+    app.log_widget = tk.Text(status_frame, **log_widget_kwargs)
+    app.log_widget.grid(row=2, column=0, sticky="ew", pady=(6, 0))
 
 
 def choose_vault(vault_var: tk.StringVar, log: Callable[[str], None]) -> None:
