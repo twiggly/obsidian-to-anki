@@ -2,16 +2,15 @@ import unittest
 
 from common import effective_italicize_quoted_text, unexpected_error_message
 from gui_view import (
-    attach_tooltip,
     append_folder_filter,
     remove_folder_filters,
-    resolve_relative_tooltip_position,
     set_anki_field_choices,
     set_combobox_choices,
     sync_anki_option_state,
     sync_html_option_state,
     sync_output_option_state,
 )
+from gui_widgets import attach_tooltip, resolve_relative_tooltip_position
 
 
 class FakeCheckbutton:
