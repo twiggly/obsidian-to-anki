@@ -10,7 +10,6 @@ from common import (
     duplicate_handling_display_label,
     duplicate_handling_from_display,
     format_target_tags,
-    normalize_duplicate_handling,
 )
 from gui_anki_controller import (
     finish_anki_catalog_refresh_error as finish_anki_catalog_refresh_error_helper,
@@ -23,6 +22,16 @@ from gui_anki_controller import (
     refresh_anki_fields_if_needed as refresh_anki_fields_if_needed_helper,
     set_anki_connection_status as set_anki_connection_status_helper,
     sync_anki_option_state as sync_anki_option_state_helper,
+)
+from gui_delivery_controller import (
+    begin_delivery as begin_delivery_helper,
+    finish_delivery_error as finish_delivery_error_helper,
+    finish_delivery_success as finish_delivery_success_helper,
+    finish_preview_error as finish_preview_error_helper,
+    finish_preview_success as finish_preview_success_helper,
+    log as log_helper,
+    set_busy as set_busy_helper,
+    start_preview as start_preview_helper,
 )
 from gui_logic import (
     FormValidationError,
@@ -402,113 +411,47 @@ class ExporterApp:
             return None
 
     def set_busy(self, busy: bool) -> None:
-        self.is_busy = busy
-        if busy:
-            self.preview_button.state(["disabled"])
-            self.reset_button.state(["disabled"])
-            self.tag_scan_button.state(["disabled"])
-            self.add_folder_button.state(["disabled"])
-        else:
-            self.preview_button.state(["!disabled"])
-            self.reset_button.state(["!disabled"])
-            self.tag_scan_button.state(["!disabled"])
-            self.add_folder_button.state(["!disabled"])
-        self.set_selected_tags_in_listbox(self.get_selected_tags_from_listbox())
-        self.set_folder_filters_in_listbox(self.get_folder_filters_from_listbox())
+        set_busy_helper(self, busy)
 
     def start_preview(self) -> None:
-        if self.is_busy:
-            return
-
-        options = self.build_options_from_form()
-        if options is None:
-            return
-
-        self.set_busy(True)
-        self.status_var.set("Generating preview…")
-        self.log(
-            f"Generating preview for {format_target_tags(options.target_tag, options.additional_target_tags)}"
-        )
-        preview_options = (
-            replace(options, duplicate_handling="warn")
-            if options.duplicate_handling == "error"
-            else options
-        )
-        start_preview_scan(
-            self.root,
-            preview_options,
-            lambda _completed_options, scan_result: self.finish_preview_success(options, scan_result),
-            self.finish_preview_error,
+        start_preview_helper(
+            self,
+            replace_options=replace,
+            format_target_tags=format_target_tags,
+            start_preview_scan=start_preview_scan,
         )
 
     def finish_preview_success(self, options: ExportOptions, scan_result: ScanResult) -> None:
-        self.set_busy(False)
-        if scan_result.total_matches == 0:
-            message = preview_no_matches_message(
-                options.target_tag,
-                options.additional_target_tags,
-                options.include_folders,
-            )
-            self.status_var.set(message)
-            self.log(message)
-            messagebox.showinfo("No matching cards", message)
-            return
-
-        message = preview_ready_message(scan_result)
-        self.status_var.set(message)
-        self.log(message)
-        for line in timing_breakdown_lines(scan_result):
-            self.log(line)
-
-        warning_message = duplicate_front_warning_message(
-            scan_result.duplicate_fronts,
-            options.duplicate_handling,
-        )
-        if warning_message is not None:
-            duplicate_count = len(scan_result.duplicate_fronts)
-            self.log(f"Detected {duplicate_count} duplicate fronts.")
-            messagebox.showwarning("Duplicate fronts detected", warning_message)
-            if options.duplicate_handling == "error":
-                stop_message = "Duplicate fronts detected. Resolve them or choose skip or suffix to continue."
-                self.status_var.set(stop_message)
-                self.log(stop_message)
-                return
-
-        show_preview_dialog(
-            self.root,
+        finish_preview_success_helper(
+            self,
             options,
             scan_result,
-            on_confirm=lambda: self.begin_delivery(options, scan_result),
-            action_label=delivery_action_label(options),
+            preview_no_matches_message=preview_no_matches_message,
+            preview_ready_message=preview_ready_message,
+            timing_breakdown_lines=timing_breakdown_lines,
+            duplicate_front_warning_message=duplicate_front_warning_message,
+            show_preview_dialog=show_preview_dialog,
+            delivery_action_label=delivery_action_label,
+            messagebox_module=messagebox,
         )
 
     def finish_preview_error(self, error_message: str, details: str | None = None) -> None:
-        self.set_busy(False)
-        self.status_var.set(error_message)
-        if details is None:
-            self.log(f"Error: {error_message}")
-        else:
-            self.log(error_message)
-            self.log(details.rstrip())
-        messagebox.showerror("Preview failed", error_message)
+        finish_preview_error_helper(
+            self,
+            error_message,
+            details,
+            messagebox_module=messagebox,
+        )
 
     def begin_delivery(self, options: ExportOptions, scan_result: ScanResult) -> None:
-        if self.is_busy:
-            return
-
-        self.set_busy(True)
-        progress_message = delivery_progress_message(options)
-        self.status_var.set(progress_message)
-        self.log(
-            f"Starting {delivery_action_label(options).lower()} for "
-            f"{format_target_tags(options.target_tag, options.additional_target_tags)}"
-        )
-        start_delivery(
-            self.root,
+        begin_delivery_helper(
+            self,
             options,
             scan_result,
-            self.finish_delivery_success,
-            self.finish_delivery_error,
+            delivery_action_label=delivery_action_label,
+            delivery_progress_message=delivery_progress_message,
+            format_target_tags=format_target_tags,
+            start_delivery=start_delivery,
         )
 
     def finish_delivery_success(
@@ -517,47 +460,28 @@ class ExporterApp:
         scan_result: ScanResult,
         delivery_result: DeliveryResult,
     ) -> None:
-        self.set_busy(False)
-        if scan_result.total_matches == 0:
-            message = export_no_cards_message(
-                options.target_tag,
-                options.additional_target_tags,
-                options.include_folders,
-            )
-            self.status_var.set(message)
-            self.log(message)
-            messagebox.showinfo("No cards exported", message)
-            return
-
-        message = delivery_complete_message(
+        finish_delivery_success_helper(
+            self,
             options,
+            scan_result,
             delivery_result,
-            len(scan_result.duplicate_fronts),
+            export_no_cards_message=export_no_cards_message,
+            delivery_complete_message=delivery_complete_message,
+            delivery_complete_title=delivery_complete_title,
+            timing_breakdown_lines=timing_breakdown_lines,
+            messagebox_module=messagebox,
         )
-        self.status_var.set(message)
-        self.log(message)
-        for line in timing_breakdown_lines(scan_result, delivery_result):
-            self.log(line)
-        if delivery_result.report_text is not None:
-            for line in delivery_result.report_text.rstrip().splitlines():
-                self.log(line)
-        messagebox.showinfo(delivery_complete_title(options), message)
 
     def finish_delivery_error(self, error_message: str, details: str | None = None) -> None:
-        self.set_busy(False)
-        self.status_var.set(error_message)
-        if details is None:
-            self.log(f"Error: {error_message}")
-        else:
-            self.log(error_message)
-            self.log(details.rstrip())
-        messagebox.showerror("Delivery failed", error_message)
+        finish_delivery_error_helper(
+            self,
+            error_message,
+            details,
+            messagebox_module=messagebox,
+        )
 
     def log(self, message: str) -> None:
-        self.log_widget.configure(state="normal")
-        self.log_widget.insert("end", message + "\n")
-        self.log_widget.see("end")
-        self.log_widget.configure(state="disabled")
+        log_helper(self, message)
 
 
 def launch_gui() -> int:
