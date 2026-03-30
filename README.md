@@ -225,3 +225,30 @@ or:
 ```bash
 python3 -m unittest -v
 ```
+
+## Branch and PR Workflow
+
+For a lightweight GitHub workflow from this repo:
+
+```bash
+make sync-main
+make branch NAME=improve-sync-copy
+```
+
+Make your changes, then open a draft PR with:
+
+```bash
+make pr
+```
+
+What these do:
+
+- `make sync-main`: switch to `main` and fast-forward from `origin/main`
+- `make branch NAME=...`: create and switch to `codex/...`
+- `make pr`: run tests, push the current branch, and open a draft PR with `gh`
+
+If you just want to see the available helper commands:
+
+```bash
+make help
+```
