@@ -52,6 +52,21 @@ class FakeCombobox(FakeButton):
         self.value = value
 
 
+class FakeGridWidget:
+    def __init__(self) -> None:
+        self.visible = True
+        self.grid_calls = 0
+        self.grid_remove_calls = 0
+
+    def grid(self) -> None:
+        self.visible = True
+        self.grid_calls += 1
+
+    def grid_remove(self) -> None:
+        self.visible = False
+        self.grid_remove_calls += 1
+
+
 def build_scan_result() -> ScanResult:
     card = NoteCard(
         front="Definition",
@@ -79,6 +94,7 @@ def build_controller() -> ExporterApp:
     app.skip_empty_var = FakeVar(False)
     app.quoted_italic_var = FakeVar(False)
     app.duplicate_handling_var = FakeVar("error")
+    app.duplicate_handling_display_var = FakeVar("Stop")
     app.sync_to_anki_var = FakeVar(False)
     app.anki_connect_url_var = FakeVar("http://127.0.0.1:8765")
     app.anki_deck_var = FakeVar("Default")
@@ -88,22 +104,28 @@ def build_controller() -> ExporterApp:
     app.anki_existing_notes_var = FakeVar("skip")
     app.anki_connection_var = FakeVar("Sync off")
     app.status_var = FakeVar("")
+    app.status_details_var = FakeVar("Show Details")
+    app.status_details_visible = False
     app.preview_button = FakeButton()
     app.reset_button = FakeButton()
     app.output_entry = FakeButton()
     app.output_button = FakeButton()
     app.tag_scan_button = FakeButton()
-    app.tag_remove_button = FakeButton()
+    app.add_folder_button = FakeButton()
     app.anki_connection_indicator = FakeButton()
     app.tag_combobox = FakeCombobox("definition")
-    app.selected_tags_listbox = mock.Mock()
+    app.selected_tags_container = mock.Mock()
+    app.selected_tag_remove_buttons = []
+    app.selected_tags = ["definition"]
     app.anki_deck_combobox = FakeCombobox("Default")
     app.anki_note_type_combobox = FakeCombobox("Basic")
     app.anki_front_field_combobox = FakeCombobox("Front")
     app.anki_back_field_combobox = FakeCombobox("Back")
     app.anki_existing_notes_combobox = FakeCombobox("skip")
     app.anki_connect_url_entry = FakeButton()
-    app.folder_filters_listbox = mock.Mock()
+    app.folder_filters_container = mock.Mock()
+    app.folder_filter_remove_buttons = []
+    app.folder_filters = []
     app.get_folder_filters_from_listbox = mock.Mock(return_value=[])
     app.get_selected_tags_from_listbox = mock.Mock(return_value=["definition"])
     app.log = mock.Mock()
@@ -176,6 +198,20 @@ class GuiControllerTests(unittest.TestCase):
         self.assertEqual(app.tag_var.get(), "")
         self.assertEqual(app.tag_combobox.value, "")
 
+    def test_set_selected_tags_in_listbox_sanitizes_and_renders_chips(self) -> None:
+        app = build_controller()
+
+        with mock.patch.object(gui, "render_tag_chips", return_value=[]) as render_tag_chips:
+            ExporterApp.set_selected_tags_in_listbox(app, ["definition", " definition ", "fallacy"])
+
+        self.assertEqual(app.selected_tags, ["definition", "fallacy"])
+        render_tag_chips.assert_called_once_with(
+            app.selected_tags_container,
+            ["definition", "fallacy"],
+            app.remove_tag,
+            disabled=False,
+        )
+
     def test_apply_saved_settings_ignores_blank_saved_tags(self) -> None:
         app = build_controller()
         app.sync_output_option_state = mock.Mock()
@@ -202,6 +238,24 @@ class GuiControllerTests(unittest.TestCase):
             ExporterApp.build_options_from_form(app)
 
         self.assertEqual(builder.call_args.kwargs["write_tsv"], False)
+
+    def test_sync_status_details_visibility_hides_log_by_default(self) -> None:
+        app = build_controller()
+        app.log_widget = FakeGridWidget()
+
+        ExporterApp.sync_status_details_visibility(app)
+
+        self.assertEqual(app.status_details_var.get(), "Show Details")
+        self.assertFalse(app.log_widget.visible)
+
+    def test_toggle_status_details_shows_log(self) -> None:
+        app = build_controller()
+        app.log_widget = FakeGridWidget()
+
+        ExporterApp.toggle_status_details(app)
+
+        self.assertEqual(app.status_details_var.get(), "Hide Details")
+        self.assertTrue(app.log_widget.visible)
 
     def test_reset_settings_restores_defaults_and_deletes_saved_settings(self) -> None:
         app = build_controller()

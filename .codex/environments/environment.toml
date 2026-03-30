@@ -1,0 +1,15 @@
+version = 1
+name = "Obsidian to Anki"
+
+[setup]
+script = "echo No setup required"
+
+[[actions]]
+name = "Run GUI"
+icon = "run"
+command = "python3 main.py"
+
+[[actions]]
+name = "Run Tests"
+icon = "test"
+command = "python3 -m unittest -q"

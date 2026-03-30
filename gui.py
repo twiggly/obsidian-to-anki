@@ -6,7 +6,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Sequence
 
 from anki_sync import normalize_anki_connect_url
-from common import DUPLICATE_HANDLING_CHOICES, format_target_tags
+from common import (
+    duplicate_handling_display_label,
+    duplicate_handling_from_display,
+    format_target_tags,
+    normalize_duplicate_handling,
+)
 from gui_logic import (
     FormValidationError,
     build_export_options_from_values,
@@ -38,14 +43,9 @@ from gui_view import (
     choose_output,
     choose_vault,
     get_folder_filters,
-    get_listbox_values,
-    remove_folder_filters,
-    remove_selected_values,
-    remove_selected_folder_filters,
+    render_tag_chips,
     set_anki_field_choices,
     set_combobox_choices,
-    set_folder_filters,
-    set_listbox_values,
     sync_anki_option_state,
     sync_html_option_state,
     sync_output_option_state,
@@ -80,6 +80,11 @@ def sanitize_tag_values(values: Sequence[object]) -> list[str]:
     return cleaned_values
 
 
+def remove_folder_filters(existing_filters: Sequence[str], selected_indexes: Sequence[int]) -> list[str]:
+    selected = {index for index in selected_indexes if 0 <= index < len(existing_filters)}
+    return [value for index, value in enumerate(existing_filters) if index not in selected]
+
+
 DEFAULT_OUTPUT_PATH = str(Path.home() / "Desktop" / "obsidian-to-anki.tsv")
 DEFAULT_TARGET_TAG = ""
 DEFAULT_ANKI_CONNECT_URL = "http://127.0.0.1:8765"
@@ -96,8 +101,8 @@ class ExporterApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Obsidian to Anki")
-        self.root.geometry("800x600")
-        self.root.minsize(600, 600)
+        self.root.geometry("800x560")
+        self.root.minsize(600, 560)
 
         self.vault_var = tk.StringVar()
         self.output_var = tk.StringVar(value=DEFAULT_OUTPUT_PATH)
@@ -107,6 +112,9 @@ class ExporterApp:
         self.skip_empty_var = tk.BooleanVar(value=False)
         self.quoted_italic_var = tk.BooleanVar(value=False)
         self.duplicate_handling_var = tk.StringVar(value=DEFAULT_DUPLICATE_HANDLING)
+        self.duplicate_handling_display_var = tk.StringVar(
+            value=duplicate_handling_display_label(DEFAULT_DUPLICATE_HANDLING)
+        )
         self.sync_to_anki_var = tk.BooleanVar(value=False)
         self.anki_connect_url_var = tk.StringVar(value=DEFAULT_ANKI_CONNECT_URL)
         self.anki_deck_var = tk.StringVar(value=DEFAULT_ANKI_DECK)
@@ -116,15 +124,20 @@ class ExporterApp:
         self.anki_existing_notes_var = tk.StringVar(value=DEFAULT_ANKI_EXISTING_NOTES)
         self.anki_connection_var = tk.StringVar(value="Sync off")
         self.status_var = tk.StringVar(value=DEFAULT_STATUS_MESSAGE)
+        self.status_details_var = tk.StringVar(value="Show Details")
         self.is_busy = False
+        self.status_details_visible = False
         self._anki_catalog_loading = False
         self._anki_field_loading = False
         self._last_loaded_anki_url: str | None = None
         self._last_loaded_anki_note_type: str | None = None
         self._pending_anki_catalog_url: str | None = None
         self._pending_anki_field_key: tuple[str, str] | None = None
+        self.selected_tags: list[str] = []
+        self.folder_filters: list[str] = []
 
-        self.folder_filters_listbox: tk.Listbox
+        self.folder_filters_container: tk.Frame
+        self.folder_filter_remove_buttons: list[tk.Label]
         self.output_tsv_checkbutton: ttk.Checkbutton
         self.output_entry: ttk.Entry
         self.output_button: ttk.Button
@@ -132,9 +145,10 @@ class ExporterApp:
         self.quoted_italic_checkbutton: ttk.Checkbutton
         self.duplicate_handling_combobox: ttk.Combobox
         self.tag_combobox: ttk.Combobox
-        self.selected_tags_listbox: tk.Listbox
+        self.selected_tags_container: tk.Frame
+        self.selected_tag_remove_buttons: list[tk.Button]
         self.tag_scan_button: ttk.Button
-        self.tag_remove_button: ttk.Button
+        self.add_folder_button: ttk.Button
         self.sync_to_anki_checkbutton: ttk.Checkbutton
         self.anki_connection_indicator: ttk.Label
         self.anki_connect_url_entry: ttk.Entry
@@ -145,6 +159,7 @@ class ExporterApp:
         self.anki_existing_notes_combobox: ttk.Combobox
         self.reset_button: ttk.Button
         self.preview_button: ttk.Button
+        self.status_toggle_button: ttk.Button
         self.log_widget: tk.Text
 
         self.build_ui()
@@ -154,6 +169,7 @@ class ExporterApp:
 
     def build_ui(self) -> None:
         build_main_window(self)
+        self.sync_status_details_visibility()
 
     def apply_default_settings(self) -> None:
         self.vault_var.set("")
@@ -165,6 +181,9 @@ class ExporterApp:
         self.skip_empty_var.set(False)
         self.quoted_italic_var.set(False)
         self.duplicate_handling_var.set(DEFAULT_DUPLICATE_HANDLING)
+        self.duplicate_handling_display_var.set(
+            duplicate_handling_display_label(DEFAULT_DUPLICATE_HANDLING)
+        )
         self.set_folder_filters_in_listbox([])
         self.sync_to_anki_var.set(False)
         self.anki_connect_url_var.set(DEFAULT_ANKI_CONNECT_URL)
@@ -200,13 +219,16 @@ class ExporterApp:
         self.quoted_italic_var.set(
             bool(settings.get("italicize_quoted_text", self.quoted_italic_var.get()))
         )
-        self.duplicate_handling_var.set(
-            (
-                saved_duplicate_handling
-                if (saved_duplicate_handling := str(settings.get("duplicate_handling", self.duplicate_handling_var.get())))
-                in DUPLICATE_HANDLING_CHOICES
-                else DEFAULT_DUPLICATE_HANDLING
-            )
+        saved_duplicate_handling = str(
+            settings.get("duplicate_handling", self.duplicate_handling_var.get())
+        )
+        try:
+            normalized_duplicate_handling = normalize_duplicate_handling(saved_duplicate_handling)
+        except Exception:
+            normalized_duplicate_handling = DEFAULT_DUPLICATE_HANDLING
+        self.duplicate_handling_var.set(normalized_duplicate_handling)
+        self.duplicate_handling_display_var.set(
+            duplicate_handling_display_label(normalized_duplicate_handling)
         )
         self.sync_to_anki_var.set(bool(settings.get("sync_to_anki", self.sync_to_anki_var.get())))
         self.anki_connect_url_var.set(
@@ -223,7 +245,7 @@ class ExporterApp:
         )
         include_folders = settings.get("include_folders", [])
         if isinstance(include_folders, list):
-            set_folder_filters(self.folder_filters_listbox, include_folders)
+            self.set_folder_filters_in_listbox(include_folders)
         self.sync_output_option_state()
         self.sync_html_option_state()
         self.sync_anki_option_state()
@@ -289,6 +311,26 @@ class ExporterApp:
             self.write_tsv_var.get(),
             [self.output_entry, self.output_button],
         )
+
+    def sync_status_details_visibility(self) -> None:
+        if self.status_details_visible:
+            self.status_details_var.set("Hide Details")
+            self.log_widget.grid()
+        else:
+            self.status_details_var.set("Show Details")
+            self.log_widget.grid_remove()
+
+    def toggle_status_details(self) -> None:
+        self.status_details_visible = not self.status_details_visible
+        self.sync_status_details_visibility()
+
+    def on_duplicate_handling_change(self, _: object | None = None) -> None:
+        try:
+            normalized = duplicate_handling_from_display(self.duplicate_handling_display_var.get())
+        except Exception:
+            normalized = DEFAULT_DUPLICATE_HANDLING
+        self.duplicate_handling_var.set(normalized)
+        self.duplicate_handling_display_var.set(duplicate_handling_display_label(normalized))
 
     def set_anki_connection_status(self, status: str) -> None:
         status_map = {
@@ -496,16 +538,35 @@ class ExporterApp:
         self.refresh_anki_fields_if_needed()
 
     def get_folder_filters_from_listbox(self) -> list[str]:
-        return get_folder_filters(self.folder_filters_listbox)
+        return list(self.folder_filters)
 
     def set_folder_filters_in_listbox(self, folder_filters: list[str]) -> None:
-        set_folder_filters(self.folder_filters_listbox, folder_filters)
+        self.folder_filters = sanitize_tag_values(folder_filters)
+        if not hasattr(self.folder_filters_container, "winfo_children"):
+            self.folder_filter_remove_buttons = []
+            return
+        self.folder_filter_remove_buttons = render_tag_chips(
+            self.folder_filters_container,
+            self.folder_filters,
+            self.remove_folder_filter,
+            disabled=self.is_busy,
+            empty_text="No folders selected",
+        )
 
     def get_selected_tags_from_listbox(self) -> list[str]:
-        return get_listbox_values(self.selected_tags_listbox)
+        return list(self.selected_tags)
 
     def set_selected_tags_in_listbox(self, tags: list[str]) -> None:
-        set_listbox_values(self.selected_tags_listbox, sanitize_tag_values(tags))
+        self.selected_tags = sanitize_tag_values(tags)
+        if not hasattr(self.selected_tags_container, "tk"):
+            self.selected_tag_remove_buttons = []
+            return
+        self.selected_tag_remove_buttons = render_tag_chips(
+            self.selected_tags_container,
+            self.selected_tags,
+            self.remove_tag,
+            disabled=self.is_busy,
+        )
 
     def add_selected_tag(self, _: object | None = None) -> None:
         tag_value = self.tag_var.get().strip()
@@ -518,11 +579,8 @@ class ExporterApp:
             self.tag_var.set("")
             self.tag_combobox.set("")
 
-    def remove_selected_tags(self) -> None:
-        updated_values = remove_selected_values(
-            self.get_selected_tags_from_listbox(),
-            self.selected_tags_listbox.curselection(),
-        )
+    def remove_tag(self, tag: str) -> None:
+        updated_values = [value for value in self.get_selected_tags_from_listbox() if value != tag]
         self.set_selected_tags_in_listbox(updated_values)
 
     def add_folder_filter(self) -> None:
@@ -534,12 +592,10 @@ class ExporterApp:
         if updated_values is not None:
             self.set_folder_filters_in_listbox(updated_values)
 
-    def remove_selected_folder_filters(self) -> None:
-        updated_values = remove_selected_folder_filters(
-            self.get_folder_filters_from_listbox(),
-            self.folder_filters_listbox.curselection(),
-            self.log,
-        )
+    def remove_folder_filter(self, folder_filter: str) -> None:
+        updated_values = [value for value in self.get_folder_filters_from_listbox() if value != folder_filter]
+        if updated_values != self.get_folder_filters_from_listbox():
+            self.log(f"Removed folder filter: {folder_filter}")
         self.set_folder_filters_in_listbox(updated_values)
 
     def scan_vault_tags(self) -> None:
@@ -620,12 +676,14 @@ class ExporterApp:
             self.preview_button.state(["disabled"])
             self.reset_button.state(["disabled"])
             self.tag_scan_button.state(["disabled"])
-            self.tag_remove_button.state(["disabled"])
+            self.add_folder_button.state(["disabled"])
         else:
             self.preview_button.state(["!disabled"])
             self.reset_button.state(["!disabled"])
             self.tag_scan_button.state(["!disabled"])
-            self.tag_remove_button.state(["!disabled"])
+            self.add_folder_button.state(["!disabled"])
+        self.set_selected_tags_in_listbox(self.get_selected_tags_from_listbox())
+        self.set_folder_filters_in_listbox(self.get_folder_filters_from_listbox())
 
     def start_preview(self) -> None:
         if self.is_busy:

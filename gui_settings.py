@@ -11,6 +11,7 @@ GUI_SETTINGS_KEYS = {
     "output": str,
     "write_tsv": bool,
     "tag": str,
+    "tags": list,
     "html_output": bool,
     "skip_empty": bool,
     "italicize_quoted_text": bool,

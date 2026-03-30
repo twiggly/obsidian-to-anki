@@ -24,6 +24,14 @@ PREVIEW_CARD_LIMIT = 10
 DUPLICATE_SUMMARY_LIMIT = 8
 DUPLICATE_PATH_LIMIT = 3
 DUPLICATE_HANDLING_CHOICES = ("skip", "suffix", "error")
+DUPLICATE_HANDLING_LABELS = {
+    "skip": "Keep first",
+    "suffix": "Rename duplicates",
+    "error": "Stop",
+}
+DUPLICATE_HANDLING_DISPLAY_CHOICES = tuple(
+    DUPLICATE_HANDLING_LABELS[choice] for choice in DUPLICATE_HANDLING_CHOICES
+)
 ANKI_EXISTING_NOTE_CHOICES = ("skip", "update")
 PART_OF_SPEECH_LABELS = {
     "abbreviation",
@@ -85,6 +93,18 @@ def normalize_duplicate_handling(strategy: str) -> str:
             "Duplicate handling must be one of: " + ", ".join(DUPLICATE_HANDLING_CHOICES)
         )
     return normalized
+
+
+def duplicate_handling_display_label(strategy: str) -> str:
+    return DUPLICATE_HANDLING_LABELS[normalize_duplicate_handling(strategy)]
+
+
+def duplicate_handling_from_display(label: str) -> str:
+    normalized_label = label.strip()
+    for strategy, display_label in DUPLICATE_HANDLING_LABELS.items():
+        if normalized_label == display_label:
+            return strategy
+    return normalize_duplicate_handling(normalized_label)
 
 
 def normalize_anki_existing_notes(strategy: str) -> str:

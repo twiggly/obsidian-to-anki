@@ -107,7 +107,13 @@ def show_preview_dialog(
 
     listbox.bind("<<ListboxSelect>>", on_select)
     ttk.Button(button_row, text="Cancel", command=dialog.destroy).grid(row=0, column=0, padx=(0, 8))
-    ttk.Button(button_row, text=action_label, command=confirm_from_preview).grid(row=0, column=1)
+    action_button = ttk.Button(
+        button_row,
+        text=action_label,
+        command=confirm_from_preview,
+        default="active",
+    )
+    action_button.grid(row=0, column=1)
 
     listbox.selection_set(0)
     show_selected_card(0)

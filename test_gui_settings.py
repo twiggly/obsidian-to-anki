@@ -12,7 +12,9 @@ class GuiSettingsTests(unittest.TestCase):
             settings = {
                 "vault": "/tmp/vault",
                 "output": "/tmp/out.tsv",
+                "write_tsv": True,
                 "tag": "definition",
+                "tags": ["definition", "fallacy"],
                 "html_output": True,
                 "skip_empty": True,
                 "italicize_quoted_text": False,
