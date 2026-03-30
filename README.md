@@ -235,6 +235,8 @@ make sync-main
 make branch NAME=improve-sync-copy
 ```
 
+These helpers are optional. You can still use the regular `git` and `gh` commands directly if you prefer.
+
 Make your changes, then open a draft PR with:
 
 ```bash
