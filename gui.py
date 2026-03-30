@@ -12,6 +12,18 @@ from common import (
     format_target_tags,
     normalize_duplicate_handling,
 )
+from gui_anki_controller import (
+    finish_anki_catalog_refresh_error as finish_anki_catalog_refresh_error_helper,
+    finish_anki_catalog_refresh_success as finish_anki_catalog_refresh_success_helper,
+    finish_anki_field_refresh_error as finish_anki_field_refresh_error_helper,
+    finish_anki_field_refresh_success as finish_anki_field_refresh_success_helper,
+    refresh_anki_catalog as refresh_anki_catalog_helper,
+    refresh_anki_catalog_if_needed as refresh_anki_catalog_if_needed_helper,
+    refresh_anki_fields as refresh_anki_fields_helper,
+    refresh_anki_fields_if_needed as refresh_anki_fields_if_needed_helper,
+    set_anki_connection_status as set_anki_connection_status_helper,
+    sync_anki_option_state as sync_anki_option_state_helper,
+)
 from gui_logic import (
     FormValidationError,
     build_export_options_from_values,
@@ -27,7 +39,24 @@ from gui_logic import (
     timing_breakdown_lines,
 )
 from gui_preview import show_preview_dialog
+from gui_selection_controller import (
+    add_folder_filter as add_folder_filter_helper,
+    add_selected_tag as add_selected_tag_helper,
+    finish_tag_scan_error as finish_tag_scan_error_helper,
+    finish_tag_scan_success as finish_tag_scan_success_helper,
+    remove_folder_filter as remove_folder_filter_helper,
+    remove_tag as remove_tag_helper,
+    scan_vault_tags as scan_vault_tags_helper,
+    set_folder_filters as set_folder_filters_helper,
+    set_selected_tags as set_selected_tags_helper,
+)
 from gui_settings import delete_gui_settings, load_gui_settings, save_gui_settings
+from gui_state import (
+    apply_default_settings as apply_default_settings_helper,
+    apply_saved_settings as apply_saved_settings_helper,
+    collect_settings as collect_settings_helper,
+    sync_status_details_visibility as sync_status_details_visibility_helper,
+)
 from gui_tasks import (
     start_anki_catalog_refresh,
     start_anki_field_catalog_refresh,
@@ -43,13 +72,13 @@ from gui_view import (
     choose_output,
     choose_vault,
     get_folder_filters,
-    render_tag_chips,
     set_anki_field_choices,
     set_combobox_choices,
     sync_anki_option_state,
     sync_html_option_state,
     sync_output_option_state,
 )
+from gui_widgets import render_tag_chips
 from models import AnkiCatalog, AnkiFieldCatalog, DeliveryResult, ExportOptions, ScanResult
 
 if TYPE_CHECKING:
@@ -64,20 +93,6 @@ else:
         filedialog = None
         messagebox = None
         ttk = None
-
-
-def sanitize_tag_values(values: Sequence[object]) -> list[str]:
-    cleaned_values: list[str] = []
-    seen: set[str] = set()
-
-    for value in values:
-        cleaned = str(value).strip()
-        if not cleaned or cleaned in seen:
-            continue
-        seen.add(cleaned)
-        cleaned_values.append(cleaned)
-
-    return cleaned_values
 
 
 def remove_folder_filters(existing_filters: Sequence[str], selected_indexes: Sequence[int]) -> list[str]:
@@ -172,104 +187,29 @@ class ExporterApp:
         self.sync_status_details_visibility()
 
     def apply_default_settings(self) -> None:
-        self.vault_var.set("")
-        self.output_var.set(DEFAULT_OUTPUT_PATH)
-        self.write_tsv_var.set(True)
-        self.tag_var.set(DEFAULT_TARGET_TAG)
-        self.set_selected_tags_in_listbox([])
-        self.html_var.set(False)
-        self.skip_empty_var.set(False)
-        self.quoted_italic_var.set(False)
-        self.duplicate_handling_var.set(DEFAULT_DUPLICATE_HANDLING)
-        self.duplicate_handling_display_var.set(
-            duplicate_handling_display_label(DEFAULT_DUPLICATE_HANDLING)
+        apply_default_settings_helper(
+            self,
+            default_output_path=DEFAULT_OUTPUT_PATH,
+            default_target_tag=DEFAULT_TARGET_TAG,
+            default_duplicate_handling=DEFAULT_DUPLICATE_HANDLING,
+            default_anki_connect_url=DEFAULT_ANKI_CONNECT_URL,
+            default_anki_deck=DEFAULT_ANKI_DECK,
+            default_anki_note_type=DEFAULT_ANKI_NOTE_TYPE,
+            default_anki_front_field=DEFAULT_ANKI_FRONT_FIELD,
+            default_anki_back_field=DEFAULT_ANKI_BACK_FIELD,
+            default_anki_existing_notes=DEFAULT_ANKI_EXISTING_NOTES,
+            default_status_message=DEFAULT_STATUS_MESSAGE,
         )
-        self.set_folder_filters_in_listbox([])
-        self.sync_to_anki_var.set(False)
-        self.anki_connect_url_var.set(DEFAULT_ANKI_CONNECT_URL)
-        self.anki_deck_var.set(DEFAULT_ANKI_DECK)
-        self.anki_note_type_var.set(DEFAULT_ANKI_NOTE_TYPE)
-        self.anki_front_field_var.set(DEFAULT_ANKI_FRONT_FIELD)
-        self.anki_back_field_var.set(DEFAULT_ANKI_BACK_FIELD)
-        self.anki_existing_notes_var.set(DEFAULT_ANKI_EXISTING_NOTES)
-        self._last_loaded_anki_url = None
-        self._last_loaded_anki_note_type = None
-        self._pending_anki_catalog_url = None
-        self._pending_anki_field_key = None
-        self.status_var.set(DEFAULT_STATUS_MESSAGE)
-        self.sync_output_option_state()
-        self.sync_html_option_state()
-        self.sync_anki_option_state()
 
     def apply_saved_settings(self) -> None:
-        settings = load_gui_settings()
-        self.vault_var.set(str(settings.get("vault", self.vault_var.get())))
-        self.output_var.set(str(settings.get("output", self.output_var.get())))
-        self.write_tsv_var.set(bool(settings.get("write_tsv", self.write_tsv_var.get())))
-        self.tag_var.set(str(settings.get("tag", self.tag_var.get())))
-        saved_tags = settings.get("tags")
-        cleaned_saved_tags = sanitize_tag_values(saved_tags) if isinstance(saved_tags, list) else []
-        if cleaned_saved_tags:
-            self.set_selected_tags_in_listbox(cleaned_saved_tags)
-        else:
-            self.tag_var.set("")
-            self.set_selected_tags_in_listbox([])
-        self.html_var.set(bool(settings.get("html_output", self.html_var.get())))
-        self.skip_empty_var.set(bool(settings.get("skip_empty", self.skip_empty_var.get())))
-        self.quoted_italic_var.set(
-            bool(settings.get("italicize_quoted_text", self.quoted_italic_var.get()))
+        apply_saved_settings_helper(
+            self,
+            load_gui_settings(),
+            default_duplicate_handling=DEFAULT_DUPLICATE_HANDLING,
         )
-        saved_duplicate_handling = str(
-            settings.get("duplicate_handling", self.duplicate_handling_var.get())
-        )
-        try:
-            normalized_duplicate_handling = normalize_duplicate_handling(saved_duplicate_handling)
-        except Exception:
-            normalized_duplicate_handling = DEFAULT_DUPLICATE_HANDLING
-        self.duplicate_handling_var.set(normalized_duplicate_handling)
-        self.duplicate_handling_display_var.set(
-            duplicate_handling_display_label(normalized_duplicate_handling)
-        )
-        self.sync_to_anki_var.set(bool(settings.get("sync_to_anki", self.sync_to_anki_var.get())))
-        self.anki_connect_url_var.set(
-            str(settings.get("anki_connect_url", self.anki_connect_url_var.get()))
-        )
-        self.anki_deck_var.set(str(settings.get("anki_deck", self.anki_deck_var.get())))
-        self.anki_note_type_var.set(str(settings.get("anki_note_type", self.anki_note_type_var.get())))
-        self.anki_front_field_var.set(
-            str(settings.get("anki_front_field", self.anki_front_field_var.get()))
-        )
-        self.anki_back_field_var.set(str(settings.get("anki_back_field", self.anki_back_field_var.get())))
-        self.anki_existing_notes_var.set(
-            str(settings.get("anki_existing_notes", self.anki_existing_notes_var.get()))
-        )
-        include_folders = settings.get("include_folders", [])
-        if isinstance(include_folders, list):
-            self.set_folder_filters_in_listbox(include_folders)
-        self.sync_output_option_state()
-        self.sync_html_option_state()
-        self.sync_anki_option_state()
 
     def collect_settings(self) -> dict[str, object]:
-        return {
-            "vault": self.vault_var.get(),
-            "output": self.output_var.get(),
-            "write_tsv": self.write_tsv_var.get(),
-            "tag": self.tag_var.get(),
-            "tags": self.get_selected_tags_from_listbox(),
-            "html_output": self.html_var.get(),
-            "skip_empty": self.skip_empty_var.get(),
-            "italicize_quoted_text": self.quoted_italic_var.get(),
-            "duplicate_handling": self.duplicate_handling_var.get(),
-            "include_folders": self.get_folder_filters_from_listbox(),
-            "sync_to_anki": self.sync_to_anki_var.get(),
-            "anki_connect_url": self.anki_connect_url_var.get(),
-            "anki_deck": self.anki_deck_var.get(),
-            "anki_note_type": self.anki_note_type_var.get(),
-            "anki_front_field": self.anki_front_field_var.get(),
-            "anki_back_field": self.anki_back_field_var.get(),
-            "anki_existing_notes": self.anki_existing_notes_var.get(),
-        }
+        return collect_settings_helper(self)
 
     def save_settings(self) -> None:
         save_gui_settings(self.collect_settings())
@@ -313,12 +253,7 @@ class ExporterApp:
         )
 
     def sync_status_details_visibility(self) -> None:
-        if self.status_details_visible:
-            self.status_details_var.set("Hide Details")
-            self.log_widget.grid()
-        else:
-            self.status_details_var.set("Show Details")
-            self.log_widget.grid_remove()
+        sync_status_details_visibility_helper(self)
 
     def toggle_status_details(self) -> None:
         self.status_details_visible = not self.status_details_visible
@@ -333,94 +268,24 @@ class ExporterApp:
         self.duplicate_handling_display_var.set(duplicate_handling_display_label(normalized))
 
     def set_anki_connection_status(self, status: str) -> None:
-        status_map = {
-            "off": ("Sync off", "AnkiOff.TLabel"),
-            "loading": ("Connecting…", "AnkiPending.TLabel"),
-            "connected": ("Connected", "AnkiConnected.TLabel"),
-            "error": ("Connection failed", "AnkiError.TLabel"),
-        }
-        text, style_name = status_map.get(status, status_map["off"])
-        self.anki_connection_var.set(text)
-        self.anki_connection_indicator.configure(style=style_name)
+        set_anki_connection_status_helper(self, status)
 
     def sync_anki_option_state(self) -> None:
-        sync_enabled = self.sync_to_anki_var.get()
-        sync_anki_option_state(
-            sync_enabled,
-            [
-                self.anki_connect_url_entry,
-                self.anki_deck_combobox,
-                self.anki_note_type_combobox,
-                self.anki_front_field_combobox,
-                self.anki_back_field_combobox,
-                self.anki_existing_notes_combobox,
-            ],
-        )
-        if sync_enabled:
-            if self._last_loaded_anki_url is not None:
-                self.set_anki_connection_status("connected")
-            self.refresh_anki_catalog_if_needed()
-        else:
-            self.set_anki_connection_status("off")
+        sync_anki_option_state_helper(self, sync_anki_option_state)
 
     def refresh_anki_catalog_if_needed(self) -> None:
-        if not self.sync_to_anki_var.get():
-            return
-        try:
-            normalized_url = normalize_anki_connect_url(self.anki_connect_url_var.get())
-        except FormValidationError:
-            return
-        except Exception:
-            return
-        if normalized_url == self._last_loaded_anki_url:
-            self.refresh_anki_fields_if_needed()
-            return
-        self.refresh_anki_catalog(show_error_dialog=False)
+        refresh_anki_catalog_if_needed_helper(self, normalize_anki_connect_url)
 
     def refresh_anki_fields_if_needed(self) -> None:
-        if not self.sync_to_anki_var.get():
-            return
-        note_type_name = self.anki_note_type_var.get().strip()
-        if not note_type_name:
-            return
-        try:
-            normalized_url = normalize_anki_connect_url(self.anki_connect_url_var.get())
-        except Exception:
-            return
-        if (
-            normalized_url == self._last_loaded_anki_url
-            and note_type_name == self._last_loaded_anki_note_type
-        ):
-            return
-        self.refresh_anki_fields(note_type_name=note_type_name, show_error_dialog=False)
+        refresh_anki_fields_if_needed_helper(self, normalize_anki_connect_url)
 
     def refresh_anki_catalog(self, show_error_dialog: bool = True) -> None:
-        if self.is_busy or self._anki_catalog_loading:
-            return
-
-        try:
-            normalized_url = normalize_anki_connect_url(self.anki_connect_url_var.get())
-        except Exception as exc:
-            self.set_anki_connection_status("error")
-            self.status_var.set(str(exc))
-            self.log(f"Error: {exc}")
-            if show_error_dialog:
-                messagebox.showerror("Anki refresh failed", str(exc))
-            return
-        self._anki_catalog_loading = True
-        self._pending_anki_catalog_url = normalized_url
-        self.set_anki_connection_status("loading")
-        self.status_var.set("Loading Anki decks and note types…")
-        self.log("Loading deck and note type lists from AnkiConnect.")
-        start_anki_catalog_refresh(
-            self.root,
-            normalized_url,
-            self.finish_anki_catalog_refresh_success,
-            lambda error_message, details=None: self.finish_anki_catalog_refresh_error(
-                error_message,
-                details,
-                show_error_dialog=show_error_dialog,
-            ),
+        refresh_anki_catalog_helper(
+            self,
+            normalize_anki_connect_url,
+            start_anki_catalog_refresh,
+            messagebox,
+            show_error_dialog=show_error_dialog,
         )
 
     def refresh_anki_fields(
@@ -428,53 +293,17 @@ class ExporterApp:
         note_type_name: str | None = None,
         show_error_dialog: bool = True,
     ) -> None:
-        if self.is_busy or self._anki_field_loading or not self.sync_to_anki_var.get():
-            return
-
-        resolved_note_type = (note_type_name or self.anki_note_type_var.get()).strip()
-        if not resolved_note_type:
-            return
-        try:
-            normalized_url = normalize_anki_connect_url(self.anki_connect_url_var.get())
-        except Exception as exc:
-            self.status_var.set(str(exc))
-            self.log(f"Error: {exc}")
-            if show_error_dialog:
-                messagebox.showerror("Anki field refresh failed", str(exc))
-            return
-        self._anki_field_loading = True
-        self._pending_anki_field_key = (normalized_url, resolved_note_type)
-        self.status_var.set(f"Loading fields for note type '{resolved_note_type}'…")
-        self.log(f"Loading Anki field names for note type '{resolved_note_type}'.")
-        start_anki_field_catalog_refresh(
-            self.root,
-            normalized_url,
-            resolved_note_type,
-            self.finish_anki_field_refresh_success,
-            lambda error_message, details=None: self.finish_anki_field_refresh_error(
-                error_message,
-                details,
-                show_error_dialog=show_error_dialog,
-            ),
+        refresh_anki_fields_helper(
+            self,
+            normalize_anki_connect_url,
+            start_anki_field_catalog_refresh,
+            messagebox,
+            note_type_name=note_type_name,
+            show_error_dialog=show_error_dialog,
         )
 
     def finish_anki_catalog_refresh_success(self, catalog: AnkiCatalog) -> None:
-        self._anki_catalog_loading = False
-        self._last_loaded_anki_url = self._pending_anki_catalog_url
-        self._pending_anki_catalog_url = None
-        set_combobox_choices(self.anki_deck_combobox, catalog.deck_names, self.anki_deck_var.get())
-        set_combobox_choices(
-            self.anki_note_type_combobox,
-            catalog.note_type_names,
-            self.anki_note_type_var.get(),
-        )
-        self.set_anki_connection_status("connected")
-        loaded_message = (
-            f"Loaded {len(catalog.deck_names)} decks and {len(catalog.note_type_names)} note types from AnkiConnect."
-        )
-        self.status_var.set(loaded_message)
-        self.log(loaded_message)
-        self.refresh_anki_fields_if_needed()
+        finish_anki_catalog_refresh_success_helper(self, catalog, set_combobox_choices)
 
     def finish_anki_catalog_refresh_error(
         self,
@@ -483,35 +312,16 @@ class ExporterApp:
         *,
         show_error_dialog: bool = True,
     ) -> None:
-        self._anki_catalog_loading = False
-        self._pending_anki_catalog_url = None
-        self.set_anki_connection_status("error")
-        self.status_var.set(error_message)
-        if details is None:
-            self.log(f"Error: {error_message}")
-        else:
-            self.log(error_message)
-            self.log(details.rstrip())
-        if show_error_dialog:
-            messagebox.showerror("Anki refresh failed", error_message)
+        finish_anki_catalog_refresh_error_helper(
+            self,
+            error_message,
+            details,
+            messagebox,
+            show_error_dialog=show_error_dialog,
+        )
 
     def finish_anki_field_refresh_success(self, field_catalog: AnkiFieldCatalog) -> None:
-        self._anki_field_loading = False
-        if self._pending_anki_field_key is not None:
-            self._last_loaded_anki_url, self._last_loaded_anki_note_type = self._pending_anki_field_key
-        self._pending_anki_field_key = None
-        set_anki_field_choices(
-            self.anki_front_field_combobox,
-            self.anki_back_field_combobox,
-            field_catalog.field_names,
-            self.anki_front_field_var.get(),
-            self.anki_back_field_var.get(),
-        )
-        loaded_message = (
-            f"Loaded {len(field_catalog.field_names)} fields for note type '{field_catalog.note_type_name}'."
-        )
-        self.status_var.set(loaded_message)
-        self.log(loaded_message)
+        finish_anki_field_refresh_success_helper(self, field_catalog, set_anki_field_choices)
 
     def finish_anki_field_refresh_error(
         self,
@@ -520,16 +330,13 @@ class ExporterApp:
         *,
         show_error_dialog: bool = True,
     ) -> None:
-        self._anki_field_loading = False
-        self._pending_anki_field_key = None
-        self.status_var.set(error_message)
-        if details is None:
-            self.log(f"Error: {error_message}")
-        else:
-            self.log(error_message)
-            self.log(details.rstrip())
-        if show_error_dialog:
-            messagebox.showerror("Anki field refresh failed", error_message)
+        finish_anki_field_refresh_error_helper(
+            self,
+            error_message,
+            details,
+            messagebox,
+            show_error_dialog=show_error_dialog,
+        )
 
     def on_anki_connect_url_change(self, _: object | None = None) -> None:
         self.refresh_anki_catalog_if_needed()
@@ -541,110 +348,34 @@ class ExporterApp:
         return list(self.folder_filters)
 
     def set_folder_filters_in_listbox(self, folder_filters: list[str]) -> None:
-        self.folder_filters = sanitize_tag_values(folder_filters)
-        if not hasattr(self.folder_filters_container, "winfo_children"):
-            self.folder_filter_remove_buttons = []
-            return
-        self.folder_filter_remove_buttons = render_tag_chips(
-            self.folder_filters_container,
-            self.folder_filters,
-            self.remove_folder_filter,
-            disabled=self.is_busy,
-            empty_text="No folders selected",
-        )
+        set_folder_filters_helper(self, folder_filters, render_tag_chips)
 
     def get_selected_tags_from_listbox(self) -> list[str]:
         return list(self.selected_tags)
 
     def set_selected_tags_in_listbox(self, tags: list[str]) -> None:
-        self.selected_tags = sanitize_tag_values(tags)
-        if not hasattr(self.selected_tags_container, "tk"):
-            self.selected_tag_remove_buttons = []
-            return
-        self.selected_tag_remove_buttons = render_tag_chips(
-            self.selected_tags_container,
-            self.selected_tags,
-            self.remove_tag,
-            disabled=self.is_busy,
-        )
+        set_selected_tags_helper(self, tags, render_tag_chips)
 
     def add_selected_tag(self, _: object | None = None) -> None:
-        tag_value = self.tag_var.get().strip()
-        updated_values = append_unique_value(
-            self.get_selected_tags_from_listbox(),
-            tag_value,
-        )
-        self.set_selected_tags_in_listbox(updated_values)
-        if tag_value:
-            self.tag_var.set("")
-            self.tag_combobox.set("")
+        add_selected_tag_helper(self, append_unique_value)
 
     def remove_tag(self, tag: str) -> None:
-        updated_values = [value for value in self.get_selected_tags_from_listbox() if value != tag]
-        self.set_selected_tags_in_listbox(updated_values)
+        remove_tag_helper(self, tag)
 
     def add_folder_filter(self) -> None:
-        updated_values = add_folder_filter_from_dialog(
-            self.vault_var.get(),
-            self.get_folder_filters_from_listbox(),
-            self.log,
-        )
-        if updated_values is not None:
-            self.set_folder_filters_in_listbox(updated_values)
+        add_folder_filter_helper(self, add_folder_filter_from_dialog)
 
     def remove_folder_filter(self, folder_filter: str) -> None:
-        updated_values = [value for value in self.get_folder_filters_from_listbox() if value != folder_filter]
-        if updated_values != self.get_folder_filters_from_listbox():
-            self.log(f"Removed folder filter: {folder_filter}")
-        self.set_folder_filters_in_listbox(updated_values)
+        remove_folder_filter_helper(self, folder_filter)
 
     def scan_vault_tags(self) -> None:
-        if self.is_busy:
-            return
-
-        try:
-            vault_path, include_folders = build_tag_scan_request(
-                self.vault_var.get(),
-                self.get_folder_filters_from_listbox(),
-            )
-        except FormValidationError as exc:
-            messagebox.showerror(exc.title, exc.message)
-            return
-
-        self.set_busy(True)
-        self.status_var.set("Scanning vault for tags…")
-        self.log("Scanning vault to find available tags.")
-        start_tag_catalog_scan(
-            self.root,
-            vault_path,
-            include_folders,
-            self.finish_tag_scan_success,
-            self.finish_tag_scan_error,
-        )
+        scan_vault_tags_helper(self, build_tag_scan_request, start_tag_catalog_scan, messagebox)
 
     def finish_tag_scan_success(self, tag_names: tuple[str, ...]) -> None:
-        self.set_busy(False)
-        current_tag = self.tag_var.get().strip()
-        self.tag_combobox.configure(values=tag_names)
-        if not current_tag:
-            self.tag_combobox.set("")
-            self.tag_var.set("")
-        if tag_names:
-            message = f"Found {len(tag_names)} tags in the scanned vault."
-        else:
-            message = "No tags were found in the scanned vault."
-        self.status_var.set(message)
-        self.log(message)
+        finish_tag_scan_success_helper(self, tag_names)
 
     def finish_tag_scan_error(self, error_message: str, details: str | None = None) -> None:
-        self.set_busy(False)
-        self.status_var.set(error_message)
-        if details is None:
-            self.log(f"Error: {error_message}")
-        else:
-            self.log(error_message)
-            self.log(details.rstrip())
-        messagebox.showerror("Tag scan failed", error_message)
+        finish_tag_scan_error_helper(self, error_message, details, messagebox)
 
     def build_options_from_form(self) -> ExportOptions | None:
         try:
