@@ -166,6 +166,7 @@ The exporter also supports:
 - markdown link fragments like `[link](#heading)` not counting as tags
 - Obsidian wikilink heading fragments like `[[#heading|label]]` not counting as tags
 - UTF-8 BOM-prefixed notes
+- dot-prefixed vault folders and files like `.obsidian/`, `.trash/`, and `.Hidden.md` being ignored during scans
 
 ## HTML Rendering
 
