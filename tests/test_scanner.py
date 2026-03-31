@@ -83,6 +83,17 @@ class ValidationTests(unittest.TestCase):
 
             self.assertEqual(tags, ("biology", "definition"))
 
+    def test_scan_vault_tags_ignores_hidden_obsidian_folders(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            vault_path = Path(temp_dir)
+            (vault_path / ".trash").mkdir()
+            (vault_path / ".trash" / "Deleted.md").write_text("#ignored", encoding="utf-8")
+            (vault_path / "Kept.md").write_text("#definition", encoding="utf-8")
+
+            tags = scan_vault_tags(vault_path)
+
+            self.assertEqual(tags, ("definition",))
+
     def test_scan_cards_rejects_missing_vault(self) -> None:
         options = ExportOptions(
             vault_path=Path("/tmp/obsidian-to-anki-missing-vault"),
@@ -130,6 +141,18 @@ class ValidationTests(unittest.TestCase):
 
             self.assertEqual(paths, [vault_path / "Definition.MD"])
 
+    def test_iter_markdown_note_paths_ignores_hidden_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            vault_path = Path(temp_dir)
+            (vault_path / ".trash").mkdir()
+            (vault_path / ".trash" / "Deleted.md").write_text("#definition\nOld body", encoding="utf-8")
+            (vault_path / ".Hidden.md").write_text("#definition\nHidden body", encoding="utf-8")
+            (vault_path / "Visible.md").write_text("#definition\nVisible body", encoding="utf-8")
+
+            paths = list(iter_markdown_note_paths(vault_path))
+
+            self.assertEqual(paths, [vault_path / "Visible.md"])
+
     def test_scan_cards_accepts_utf8_bom_frontmatter_notes(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             vault_path = Path(temp_dir)
@@ -154,6 +177,19 @@ class ValidationTests(unittest.TestCase):
 
             self.assertEqual(result.total_matches, 1)
             self.assertEqual(result.preview_cards[0].front, "Definition")
+
+    def test_scan_cards_ignores_hidden_obsidian_folders(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            vault_path = Path(temp_dir)
+            (vault_path / ".trash").mkdir()
+            (vault_path / ".trash" / "Deleted.md").write_text("#definition\nOld body", encoding="utf-8")
+            (vault_path / "Definition.md").write_text("#definition\nA body", encoding="utf-8")
+            options = ExportOptions(vault_path=vault_path, output_path=vault_path / "out.tsv")
+
+            result = scan_cards(options, preview_limit=10)
+
+            self.assertEqual(result.total_matches, 1)
+            self.assertEqual([card.front for card in result.cards], ["Definition"])
 
     def test_scan_cards_can_skip_duplicate_fronts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

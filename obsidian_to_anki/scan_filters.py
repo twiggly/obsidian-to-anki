@@ -54,8 +54,15 @@ def note_matches_folder_filters(note_path: Path, vault_path: Path, include_folde
     return any(relative_path.startswith(folder + "/") for folder in include_folders)
 
 
+def is_hidden_vault_entry(path: Path, vault_path: Path) -> bool:
+    relative_parts = path.relative_to(vault_path).parts
+    return any(part.startswith(".") for part in relative_parts)
+
+
 def iter_markdown_note_paths(vault_path: Path) -> Iterator[Path]:
     validate_vault_path(vault_path)
     for path in sorted(vault_path.rglob("*")):
+        if is_hidden_vault_entry(path, vault_path):
+            continue
         if path.is_file() and path.suffix.casefold() == ".md":
             yield path
