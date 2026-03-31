@@ -6,7 +6,7 @@ from typing import Callable
 def set_anki_connection_status(app: object, status: str) -> None:
     status_map = {
         "off": ("Sync off", "AnkiOff.TLabel"),
-        "loading": ("Connecting…", "AnkiPending.TLabel"),
+        "loading": ("Checking…", "AnkiPending.TLabel"),
         "connected": ("Connected", "AnkiConnected.TLabel"),
         "error": ("Connection failed", "AnkiError.TLabel"),
     }
@@ -32,10 +32,13 @@ def sync_anki_option_state(
         ],
     )
     if sync_enabled:
+        app.start_anki_connection_polling()
         if app._last_loaded_anki_url is not None:
             app.set_anki_connection_status("connected")
         app.refresh_anki_catalog_if_needed()
     else:
+        app.cancel_anki_connection_refresh()
+        app.stop_anki_connection_polling()
         app.set_anki_connection_status("off")
 
 
@@ -83,6 +86,7 @@ def refresh_anki_catalog(
     messagebox_module: object,
     *,
     show_error_dialog: bool = True,
+    quiet: bool = False,
 ) -> None:
     if app.is_busy or app._anki_catalog_loading:
         return
@@ -90,25 +94,31 @@ def refresh_anki_catalog(
     try:
         normalized_url = normalize_anki_connect_url(app.anki_connect_url_var.get())
     except Exception as exc:
+        app._last_loaded_anki_url = None
+        app._last_loaded_anki_note_type = None
         app.set_anki_connection_status("error")
-        app.status_var.set(str(exc))
-        app.log(f"Error: {exc}")
-        if show_error_dialog:
+        if not quiet:
+            app.status_var.set(str(exc))
+            app.log(f"Error: {exc}")
+        if show_error_dialog and not quiet:
             messagebox_module.showerror("Anki refresh failed", str(exc))
         return
     app._anki_catalog_loading = True
     app._pending_anki_catalog_url = normalized_url
-    app.set_anki_connection_status("loading")
-    app.status_var.set("Loading Anki decks and note types…")
-    app.log("Loading deck and note type lists from AnkiConnect.")
+    if not quiet:
+        app.set_anki_connection_status("loading")
+    if not quiet:
+        app.status_var.set("Loading Anki decks and note types…")
+        app.log("Loading deck and note type lists from AnkiConnect.")
     start_anki_catalog_refresh(
         app.root,
         normalized_url,
-        app.finish_anki_catalog_refresh_success,
+        lambda catalog: app.finish_anki_catalog_refresh_success(catalog, quiet=quiet),
         lambda error_message, details=None: app.finish_anki_catalog_refresh_error(
             error_message,
             details,
             show_error_dialog=show_error_dialog,
+            quiet=quiet,
         ),
     )
 
@@ -157,6 +167,8 @@ def finish_anki_catalog_refresh_success(
     app: object,
     catalog: object,
     set_combobox_choices: Callable[[object, object, str], str],
+    *,
+    quiet: bool = False,
 ) -> None:
     app._anki_catalog_loading = False
     app._last_loaded_anki_url = app._pending_anki_catalog_url
@@ -171,8 +183,9 @@ def finish_anki_catalog_refresh_success(
     loaded_message = (
         f"Loaded {len(catalog.deck_names)} decks and {len(catalog.note_type_names)} note types from AnkiConnect."
     )
-    app.status_var.set(loaded_message)
-    app.log(loaded_message)
+    if not quiet:
+        app.status_var.set(loaded_message)
+        app.log(loaded_message)
     app.refresh_anki_fields_if_needed()
 
 
@@ -183,17 +196,21 @@ def finish_anki_catalog_refresh_error(
     messagebox_module: object,
     *,
     show_error_dialog: bool = True,
+    quiet: bool = False,
 ) -> None:
     app._anki_catalog_loading = False
     app._pending_anki_catalog_url = None
+    app._last_loaded_anki_url = None
+    app._last_loaded_anki_note_type = None
     app.set_anki_connection_status("error")
-    app.status_var.set(error_message)
-    if details is None:
-        app.log(f"Error: {error_message}")
-    else:
-        app.log(error_message)
-        app.log(details.rstrip())
-    if show_error_dialog:
+    if not quiet:
+        app.status_var.set(error_message)
+        if details is None:
+            app.log(f"Error: {error_message}")
+        else:
+            app.log(error_message)
+            app.log(details.rstrip())
+    if show_error_dialog and not quiet:
         messagebox_module.showerror("Anki refresh failed", error_message)
 
 
