@@ -8,7 +8,7 @@ help:
 		'make pr                   Run tests, push the current branch, and open a draft PR'
 
 test:
-	python3 -m unittest -v
+	python3 -m unittest discover -s tests -v
 
 sync-main:
 	git switch main

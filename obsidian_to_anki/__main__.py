@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
-
 from __future__ import annotations
 
-from obsidian_to_anki.main import *  # noqa: F401,F403
+from .cli import main
 
 
 if __name__ == "__main__":
