@@ -88,7 +88,7 @@ from .view import (
     sync_output_option_state,
 )
 from .widgets import render_tag_chips
-from ..models import AnkiCatalog, AnkiFieldCatalog, DeliveryResult, ExportOptions, ScanResult
+from ..models import AnkiCatalog, AnkiFieldCatalog, AnkiPreflightSummary, DeliveryResult, ExportOptions, ScanResult
 
 if TYPE_CHECKING:
     import tkinter as tk
@@ -119,6 +119,8 @@ DEFAULT_ANKI_BACK_FIELD = "Back"
 DEFAULT_ANKI_EXISTING_NOTES = "update"
 DEFAULT_DUPLICATE_HANDLING = "error"
 DEFAULT_STATUS_MESSAGE = "Choose a vault folder and an output file or enable direct Anki sync."
+ANKI_FOCUS_REFRESH_DELAY_MS = 750
+ANKI_POLL_REFRESH_INTERVAL_MS = 15000
 
 
 class ExporterApp:
@@ -157,6 +159,8 @@ class ExporterApp:
         self._last_loaded_anki_note_type: str | None = None
         self._pending_anki_catalog_url: str | None = None
         self._pending_anki_field_key: tuple[str, str] | None = None
+        self._anki_refresh_after_id: object | None = None
+        self._anki_poll_after_id: object | None = None
         self.selected_tags: list[str] = []
         self.folder_filters: list[str] = []
 
@@ -194,6 +198,8 @@ class ExporterApp:
     def build_ui(self) -> None:
         build_main_window(self)
         self.sync_status_details_visibility()
+        if hasattr(self.root, "bind"):
+            self.root.bind("<FocusIn>", self.on_root_focus, add="+")
 
     def apply_default_settings(self) -> None:
         apply_default_settings_helper(
@@ -224,6 +230,8 @@ class ExporterApp:
         save_gui_settings(self.collect_settings())
 
     def close(self) -> None:
+        self.cancel_anki_connection_refresh()
+        self.stop_anki_connection_polling()
         try:
             self.save_settings()
         except OSError as exc:
@@ -288,13 +296,18 @@ class ExporterApp:
     def refresh_anki_fields_if_needed(self) -> None:
         refresh_anki_fields_if_needed_helper(self, normalize_anki_connect_url)
 
-    def refresh_anki_catalog(self, show_error_dialog: bool = True) -> None:
+    def refresh_anki_catalog(
+        self,
+        show_error_dialog: bool = True,
+        quiet: bool = False,
+    ) -> None:
         refresh_anki_catalog_helper(
             self,
             normalize_anki_connect_url,
             start_anki_catalog_refresh,
             messagebox,
             show_error_dialog=show_error_dialog,
+            quiet=quiet,
         )
 
     def refresh_anki_fields(
@@ -311,8 +324,13 @@ class ExporterApp:
             show_error_dialog=show_error_dialog,
         )
 
-    def finish_anki_catalog_refresh_success(self, catalog: AnkiCatalog) -> None:
-        finish_anki_catalog_refresh_success_helper(self, catalog, set_combobox_choices)
+    def finish_anki_catalog_refresh_success(
+        self,
+        catalog: AnkiCatalog,
+        *,
+        quiet: bool = False,
+    ) -> None:
+        finish_anki_catalog_refresh_success_helper(self, catalog, set_combobox_choices, quiet=quiet)
 
     def finish_anki_catalog_refresh_error(
         self,
@@ -320,6 +338,7 @@ class ExporterApp:
         details: str | None = None,
         *,
         show_error_dialog: bool = True,
+        quiet: bool = False,
     ) -> None:
         finish_anki_catalog_refresh_error_helper(
             self,
@@ -327,6 +346,7 @@ class ExporterApp:
             details,
             messagebox,
             show_error_dialog=show_error_dialog,
+            quiet=quiet,
         )
 
     def finish_anki_field_refresh_success(self, field_catalog: AnkiFieldCatalog) -> None:
@@ -352,6 +372,60 @@ class ExporterApp:
 
     def on_anki_note_type_change(self, _: object | None = None) -> None:
         self.refresh_anki_fields_if_needed()
+
+    def on_root_focus(self, _: object | None = None) -> None:
+        if self.sync_to_anki_var.get():
+            self.schedule_anki_connection_refresh()
+
+    def cancel_anki_connection_refresh(self) -> None:
+        after_id = self._anki_refresh_after_id
+        self._anki_refresh_after_id = None
+        if after_id is None or not hasattr(self.root, "after_cancel"):
+            return
+        try:
+            self.root.after_cancel(after_id)
+        except Exception:
+            return
+
+    def schedule_anki_connection_refresh(self, delay_ms: int = ANKI_FOCUS_REFRESH_DELAY_MS) -> None:
+        self.cancel_anki_connection_refresh()
+        if not self.sync_to_anki_var.get():
+            return
+        if not hasattr(self.root, "after"):
+            self.run_anki_connection_refresh()
+            return
+        self._anki_refresh_after_id = self.root.after(delay_ms, self.run_anki_connection_refresh)
+
+    def run_anki_connection_refresh(self) -> None:
+        self._anki_refresh_after_id = None
+        if self.sync_to_anki_var.get():
+            self.refresh_anki_catalog(show_error_dialog=False, quiet=True)
+
+    def stop_anki_connection_polling(self) -> None:
+        after_id = self._anki_poll_after_id
+        self._anki_poll_after_id = None
+        if after_id is None or not hasattr(self.root, "after_cancel"):
+            return
+        try:
+            self.root.after_cancel(after_id)
+        except Exception:
+            return
+
+    def start_anki_connection_polling(self) -> None:
+        self.stop_anki_connection_polling()
+        if not self.sync_to_anki_var.get() or not hasattr(self.root, "after"):
+            return
+        self._anki_poll_after_id = self.root.after(
+            ANKI_POLL_REFRESH_INTERVAL_MS,
+            self.run_anki_connection_poll,
+        )
+
+    def run_anki_connection_poll(self) -> None:
+        self._anki_poll_after_id = None
+        if not self.sync_to_anki_var.get():
+            return
+        self.refresh_anki_catalog(show_error_dialog=False, quiet=True)
+        self.start_anki_connection_polling()
 
     def get_folder_filters_from_listbox(self) -> list[str]:
         return list(self.folder_filters)
@@ -421,11 +495,19 @@ class ExporterApp:
             start_preview_scan=start_preview_scan,
         )
 
-    def finish_preview_success(self, options: ExportOptions, scan_result: ScanResult) -> None:
+    def finish_preview_success(
+        self,
+        options: ExportOptions,
+        scan_result: ScanResult,
+        anki_preflight_summary: AnkiPreflightSummary | None = None,
+        anki_preflight_error: str | None = None,
+    ) -> None:
         finish_preview_success_helper(
             self,
             options,
             scan_result,
+            anki_preflight_summary,
+            anki_preflight_error,
             preview_no_matches_message=preview_no_matches_message,
             preview_ready_message=preview_ready_message,
             timing_breakdown_lines=timing_breakdown_lines,

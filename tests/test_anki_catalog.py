@@ -51,7 +51,38 @@ class AnkiCatalogTests(unittest.TestCase):
                 fetch_note_type_fields_fn=fetch_fields,
             )
 
-        self.assertIn("Missing Anki field", str(context.exception))
+        self.assertEqual(
+            str(context.exception),
+            "The Anki note type 'Basic' is missing these fields: Back. Choose another note type or change the selected fields.",
+        )
+
+    def test_validate_anki_target_raises_for_missing_deck(self) -> None:
+        invoke = mock.Mock(side_effect=[5, ["Default"]])
+
+        with self.assertRaises(AnkiConnectError) as context:
+            validate_anki_target(
+                build_options(),
+                invoke_anki_connect_fn=invoke,
+            )
+
+        self.assertEqual(
+            str(context.exception),
+            "The Anki deck 'Lexicon' wasn't found. Create it in Anki or choose a different deck.",
+        )
+
+    def test_validate_anki_target_raises_for_missing_note_type(self) -> None:
+        invoke = mock.Mock(side_effect=[5, ["Lexicon"], ["Cloze"]])
+
+        with self.assertRaises(AnkiConnectError) as context:
+            validate_anki_target(
+                build_options(),
+                invoke_anki_connect_fn=invoke,
+            )
+
+        self.assertEqual(
+            str(context.exception),
+            "The Anki note type 'Basic' wasn't found. Choose another note type in the app or create it in Anki.",
+        )
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ from obsidian_to_anki.gui import ExporterApp
 from obsidian_to_anki.gui.logic import FormValidationError
 from obsidian_to_anki.models import (
     AnkiCatalog,
+    AnkiPreflightSummary,
     AnkiFieldCatalog,
     AnkiSyncResult,
     DeliveryResult,
@@ -67,6 +68,28 @@ class FakeGridWidget:
         self.grid_remove_calls += 1
 
 
+class FakeRoot:
+    def __init__(self) -> None:
+        self.after_calls: list[tuple[int, object, str]] = []
+        self.after_cancel_calls: list[object] = []
+        self.bindings: list[tuple[str, object, str]] = []
+        self.destroyed = False
+
+    def after(self, delay_ms: int, callback: object) -> str:
+        token = f"after-{len(self.after_calls) + 1}"
+        self.after_calls.append((delay_ms, callback, token))
+        return token
+
+    def after_cancel(self, after_id: object) -> None:
+        self.after_cancel_calls.append(after_id)
+
+    def bind(self, event_name: str, callback: object, add: str | None = None) -> None:
+        self.bindings.append((event_name, callback, add or ""))
+
+    def destroy(self) -> None:
+        self.destroyed = True
+
+
 def build_scan_result() -> ScanResult:
     card = NoteCard(
         front="Definition",
@@ -85,7 +108,7 @@ def build_scan_result() -> ScanResult:
 
 def build_controller() -> ExporterApp:
     app = ExporterApp.__new__(ExporterApp)
-    app.root = object()
+    app.root = FakeRoot()
     app.vault_var = FakeVar("/tmp/vault")
     app.output_var = FakeVar("/tmp/out.tsv")
     app.write_tsv_var = FakeVar(True)
@@ -137,6 +160,8 @@ def build_controller() -> ExporterApp:
     app._last_loaded_anki_note_type = None
     app._pending_anki_catalog_url = None
     app._pending_anki_field_key = None
+    app._anki_refresh_after_id = None
+    app._anki_poll_after_id = None
     return app
 
 
@@ -367,6 +392,54 @@ class GuiControllerTests(unittest.TestCase):
         callback()
         app.begin_delivery.assert_called_once_with(options, scan_result)
 
+    def test_finish_preview_success_passes_anki_preflight_summary_to_dialog(self) -> None:
+        app = build_controller()
+        options = ExportOptions(
+            vault_path=Path("/tmp/vault"),
+            output_path=Path("/tmp/out.tsv"),
+            sync_to_anki=True,
+            anki_deck="Lexicon",
+            anki_note_type="Basic",
+            duplicate_handling="skip",
+        )
+        scan_result = build_scan_result()
+        preflight_summary = AnkiPreflightSummary(
+            new_count=3,
+            update_count=1,
+            skip_count=0,
+            deck_name="Lexicon",
+            note_type="Basic",
+        )
+
+        with (
+            mock.patch.object(gui, "messagebox", mock.Mock()),
+            mock.patch.object(gui, "show_preview_dialog") as show_preview_dialog,
+        ):
+            ExporterApp.finish_preview_success(app, options, scan_result, preflight_summary, None)
+
+        self.assertEqual(show_preview_dialog.call_args.kwargs["anki_preflight_summary"], preflight_summary)
+
+    def test_finish_preview_success_logs_anki_preflight_error(self) -> None:
+        app = build_controller()
+        options = ExportOptions(
+            vault_path=Path("/tmp/vault"),
+            output_path=Path("/tmp/out.tsv"),
+            sync_to_anki=True,
+            duplicate_handling="skip",
+        )
+        scan_result = build_scan_result()
+
+        with (
+            mock.patch.object(gui, "messagebox", mock.Mock()),
+            mock.patch.object(gui, "show_preview_dialog"),
+        ):
+            ExporterApp.finish_preview_success(app, options, scan_result, None, "Anki unavailable")
+
+        self.assertEqual(
+            app.log.call_args_list[-1].args[0],
+            "Anki preflight unavailable: Anki unavailable",
+        )
+
     def test_finish_preview_success_stops_after_warning_in_error_mode(self) -> None:
         app = build_controller()
         options = ExportOptions(
@@ -396,12 +469,95 @@ class GuiControllerTests(unittest.TestCase):
             ExporterApp.refresh_anki_catalog(app)
 
         self.assertEqual(app.status_var.get(), "Loading Anki decks and note types…")
-        self.assertEqual(app.anki_connection_var.get(), "Connecting…")
+        self.assertEqual(app.anki_connection_var.get(), "Checking…")
         app.log.assert_called_with("Loading deck and note type lists from AnkiConnect.")
         start_anki_catalog_refresh.assert_called_once()
         args = start_anki_catalog_refresh.call_args.args
         self.assertIs(args[0], app.root)
         self.assertEqual(args[1], "http://127.0.0.1:8765")
+
+    def test_refresh_anki_catalog_quietly_keeps_visible_connection_state(self) -> None:
+        app = build_controller()
+        app.anki_connection_var = FakeVar("Connected")
+        app.status_var = FakeVar("Existing status")
+
+        with mock.patch.object(gui, "start_anki_catalog_refresh") as start_anki_catalog_refresh:
+            ExporterApp.refresh_anki_catalog(app, show_error_dialog=False, quiet=True)
+
+        self.assertEqual(app.anki_connection_var.get(), "Connected")
+        self.assertEqual(app.status_var.get(), "Existing status")
+        app.log.assert_not_called()
+        start_anki_catalog_refresh.assert_called_once()
+
+    def test_on_root_focus_refreshes_anki_catalog(self) -> None:
+        app = build_controller()
+        app.sync_to_anki_var = FakeVar(True)
+        app.schedule_anki_connection_refresh = mock.Mock()
+
+        ExporterApp.on_root_focus(app)
+
+        app.schedule_anki_connection_refresh.assert_called_once_with()
+
+    def test_on_root_focus_does_not_refresh_anki_catalog_when_sync_is_off(self) -> None:
+        app = build_controller()
+        app.sync_to_anki_var = FakeVar(False)
+        app.schedule_anki_connection_refresh = mock.Mock()
+
+        ExporterApp.on_root_focus(app)
+
+        app.schedule_anki_connection_refresh.assert_not_called()
+
+    def test_schedule_anki_connection_refresh_debounces_prior_request(self) -> None:
+        app = build_controller()
+        app.sync_to_anki_var = FakeVar(True)
+
+        ExporterApp.schedule_anki_connection_refresh(app)
+        first_after_id = app._anki_refresh_after_id
+        ExporterApp.schedule_anki_connection_refresh(app)
+
+        self.assertEqual(app.root.after_calls[0][0], gui.ANKI_FOCUS_REFRESH_DELAY_MS)
+        self.assertEqual(app.root.after_calls[1][0], gui.ANKI_FOCUS_REFRESH_DELAY_MS)
+        self.assertEqual(app.root.after_cancel_calls, [first_after_id])
+
+    def test_run_anki_connection_refresh_uses_quiet_refresh(self) -> None:
+        app = build_controller()
+        app.sync_to_anki_var = FakeVar(True)
+        app.refresh_anki_catalog = mock.Mock()
+
+        ExporterApp.run_anki_connection_refresh(app)
+
+        app.refresh_anki_catalog.assert_called_once_with(show_error_dialog=False, quiet=True)
+
+    def test_start_anki_connection_polling_schedules_periodic_refresh(self) -> None:
+        app = build_controller()
+        app.sync_to_anki_var = FakeVar(True)
+
+        ExporterApp.start_anki_connection_polling(app)
+
+        self.assertEqual(app.root.after_calls[0][0], gui.ANKI_POLL_REFRESH_INTERVAL_MS)
+        self.assertEqual(app._anki_poll_after_id, "after-1")
+
+    def test_sync_anki_option_state_starts_polling_when_enabled(self) -> None:
+        app = build_controller()
+        app.sync_to_anki_var = FakeVar(True)
+        app.start_anki_connection_polling = mock.Mock()
+        app.refresh_anki_catalog_if_needed = mock.Mock()
+
+        ExporterApp.sync_anki_option_state(app)
+
+        app.start_anki_connection_polling.assert_called_once_with()
+        app.refresh_anki_catalog_if_needed.assert_called_once_with()
+
+    def test_sync_anki_option_state_stops_polling_when_disabled(self) -> None:
+        app = build_controller()
+        app.sync_to_anki_var = FakeVar(False)
+        app.cancel_anki_connection_refresh = mock.Mock()
+        app.stop_anki_connection_polling = mock.Mock()
+
+        ExporterApp.sync_anki_option_state(app)
+
+        app.cancel_anki_connection_refresh.assert_called_once_with()
+        app.stop_anki_connection_polling.assert_called_once_with()
 
     def test_finish_anki_catalog_refresh_success_populates_comboboxes(self) -> None:
         app = build_controller()
@@ -421,6 +577,40 @@ class GuiControllerTests(unittest.TestCase):
         self.assertEqual(app.status_var.get(), "Loaded 2 decks and 2 note types from AnkiConnect.")
         self.assertEqual(app.anki_connection_indicator.configured["style"], "AnkiConnected.TLabel")
         refresh_anki_fields_if_needed.assert_called_once()
+
+    def test_finish_anki_catalog_refresh_success_is_quiet_when_requested(self) -> None:
+        app = build_controller()
+        app.sync_to_anki_var = FakeVar(True)
+        app._pending_anki_catalog_url = "http://127.0.0.1:8765"
+        app.status_var = FakeVar("Existing status")
+        catalog = AnkiCatalog(
+            deck_names=("Default", "Obsidian"),
+            note_type_names=("Basic", "Cloze"),
+        )
+
+        with mock.patch.object(gui.ExporterApp, "refresh_anki_fields_if_needed") as refresh_anki_fields_if_needed:
+            ExporterApp.finish_anki_catalog_refresh_success(app, catalog, quiet=True)
+
+        self.assertEqual(app.status_var.get(), "Existing status")
+        app.log.assert_not_called()
+        self.assertEqual(app.anki_connection_var.get(), "Connected")
+        refresh_anki_fields_if_needed.assert_called_once()
+
+    def test_finish_anki_catalog_refresh_error_is_quiet_when_requested(self) -> None:
+        app = build_controller()
+        app._last_loaded_anki_url = "http://127.0.0.1:8765"
+        app._last_loaded_anki_note_type = "Basic"
+        app.status_var = FakeVar("Existing status")
+
+        with mock.patch.object(gui, "messagebox", mock.Mock()) as messagebox_mock:
+            ExporterApp.finish_anki_catalog_refresh_error(app, "Could not reach Anki", quiet=True)
+
+        self.assertEqual(app.status_var.get(), "Existing status")
+        app.log.assert_not_called()
+        self.assertEqual(app.anki_connection_var.get(), "Connection failed")
+        self.assertIsNone(app._last_loaded_anki_url)
+        self.assertIsNone(app._last_loaded_anki_note_type)
+        messagebox_mock.showerror.assert_not_called()
 
     def test_finish_anki_field_refresh_success_populates_field_comboboxes(self) -> None:
         app = build_controller()

@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from .connect_client import ANKI_CONNECT_API_VERSION, AnkiConnectError, invoke_anki_connect
+from .connect_client import (
+    ANKI_CONNECT_API_VERSION,
+    AnkiConnectError,
+    invoke_anki_connect,
+    unexpected_anki_response_message,
+)
 from ..models import AnkiCatalog, AnkiFieldCatalog, ExportOptions
 
 
@@ -14,15 +19,15 @@ def fetch_anki_catalog(
     version = invoke_anki_connect_fn(anki_connect_url, "version", None)
     if not isinstance(version, int) or version < ANKI_CONNECT_API_VERSION:
         raise AnkiConnectError(
-            f"AnkiConnect API version {ANKI_CONNECT_API_VERSION} or newer is required."
+            f"Update the AnkiConnect add-on to version {ANKI_CONNECT_API_VERSION} or newer."
         )
 
     deck_names = invoke_anki_connect_fn(anki_connect_url, "deckNames", None)
     note_type_names = invoke_anki_connect_fn(anki_connect_url, "modelNames", None)
     if not isinstance(deck_names, list) or not all(isinstance(name, str) for name in deck_names):
-        raise AnkiConnectError("Received an unexpected response from deckNames.")
+        raise AnkiConnectError(unexpected_anki_response_message("deckNames"))
     if not isinstance(note_type_names, list) or not all(isinstance(name, str) for name in note_type_names):
-        raise AnkiConnectError("Received an unexpected response from modelNames.")
+        raise AnkiConnectError(unexpected_anki_response_message("modelNames"))
 
     return AnkiCatalog(
         deck_names=tuple(sorted(deck_names, key=str.casefold)),
@@ -42,7 +47,7 @@ def fetch_note_type_fields(
         {"modelName": note_type_name},
     )
     if not isinstance(field_names, list) or not all(isinstance(name, str) for name in field_names):
-        raise AnkiConnectError("Received an unexpected response from modelFieldNames.")
+        raise AnkiConnectError(unexpected_anki_response_message("modelFieldNames"))
 
     return AnkiFieldCatalog(
         note_type_name=note_type_name,
@@ -59,16 +64,20 @@ def validate_anki_target(
     version = invoke_anki_connect_fn(options.anki_connect_url, "version", None)
     if not isinstance(version, int) or version < ANKI_CONNECT_API_VERSION:
         raise AnkiConnectError(
-            f"AnkiConnect API version {ANKI_CONNECT_API_VERSION} or newer is required."
+            f"Update the AnkiConnect add-on to version {ANKI_CONNECT_API_VERSION} or newer."
         )
 
     deck_names = invoke_anki_connect_fn(options.anki_connect_url, "deckNames", None)
     if options.anki_deck not in deck_names:
-        raise AnkiConnectError(f"Anki deck not found: {options.anki_deck}")
+        raise AnkiConnectError(
+            f"The Anki deck '{options.anki_deck}' wasn't found. Create it in Anki or choose a different deck."
+        )
 
     model_names = invoke_anki_connect_fn(options.anki_connect_url, "modelNames", None)
     if options.anki_note_type not in model_names:
-        raise AnkiConnectError(f"Anki note type not found: {options.anki_note_type}")
+        raise AnkiConnectError(
+            f"The Anki note type '{options.anki_note_type}' wasn't found. Choose another note type in the app or create it in Anki."
+        )
 
     field_names = fetch_note_type_fields_fn(
         options.anki_connect_url,
@@ -82,7 +91,6 @@ def validate_anki_target(
     ]
     if missing_fields:
         raise AnkiConnectError(
-            "Missing Anki field"
-            + ("s" if len(missing_fields) > 1 else "")
-            + f" on note type '{options.anki_note_type}': {', '.join(missing_fields)}"
+            f"The Anki note type '{options.anki_note_type}' is missing these fields: {', '.join(missing_fields)}. "
+            "Choose another note type or change the selected fields."
         )

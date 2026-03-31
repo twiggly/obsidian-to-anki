@@ -1,8 +1,12 @@
 import unittest
 from pathlib import Path
 
-from obsidian_to_anki.gui.preview import build_preview_info_text, close_dialog_and_run_action
-from obsidian_to_anki.models import ExportOptions, NoteCard, ScanResult
+from obsidian_to_anki.gui.preview import (
+    build_anki_preflight_text,
+    build_preview_info_text,
+    close_dialog_and_run_action,
+)
+from obsidian_to_anki.models import AnkiPreflightSummary, ExportOptions, NoteCard, ScanResult
 
 
 def build_scan_result(
@@ -46,12 +50,21 @@ class GuiPreviewTests(unittest.TestCase):
             total_matches=3,
             duplicate_fronts={"Definition": (Path("/tmp/A.md"), Path("/tmp/B.md"))},
         )
+        preflight_summary = AnkiPreflightSummary(
+            new_count=2,
+            update_count=1,
+            skip_count=0,
+            deck_name="Lexicon",
+            note_type="Basic",
+        )
 
-        info_text = build_preview_info_text(options, scan_result)
+        info_text = build_preview_info_text(options, scan_result, preflight_summary)
 
         self.assertIn("Showing the first 1 of 3 matching cards", info_text)
         self.assertIn("Included folders: Lexicon, Study", info_text)
         self.assertIn("Anki target: Lexicon / Basic.", info_text)
+        self.assertIn("Duplicate handling: Stop.", info_text)
+        self.assertIn("Anki preflight: 2 new, 1 update.", info_text)
         self.assertIn("Duplicate fronts: 1.", info_text)
 
     def test_build_preview_info_text_omits_optional_sections_when_unused(self) -> None:
@@ -63,6 +76,24 @@ class GuiPreviewTests(unittest.TestCase):
         self.assertEqual(
             info_text,
             "Showing the first 1 of 1 matching cards for #definition.",
+        )
+
+    def test_build_anki_preflight_text_includes_skip_counts_and_errors(self) -> None:
+        summary = AnkiPreflightSummary(
+            new_count=3,
+            update_count=2,
+            skip_count=1,
+            deck_name="Lexicon",
+            note_type="Basic",
+        )
+
+        self.assertEqual(
+            build_anki_preflight_text(summary),
+            "Anki preflight: 3 new, 2 updates, 1 skip.",
+        )
+        self.assertEqual(
+            build_anki_preflight_text(None, "Connection failed"),
+            "Anki preflight unavailable: Connection failed.",
         )
 
     def test_close_dialog_and_run_action_destroys_dialog_and_calls_action(self) -> None:

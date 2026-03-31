@@ -11,6 +11,7 @@ from obsidian_to_anki.gui.tasks import (
 )
 from obsidian_to_anki.models import (
     AnkiCatalog,
+    AnkiPreflightSummary,
     AnkiFieldCatalog,
     DeliveryResult,
     ExportError,
@@ -108,18 +109,55 @@ class GuiTaskTests(unittest.TestCase):
         self.assertEqual(calls, [("success", expected_catalog, None)])
 
     def test_run_preview_scan_callbacks_routes_success(self) -> None:
-        options = ExportOptions(vault_path=Path("/tmp/vault"), output_path=Path("/tmp/out.tsv"))
+        options = ExportOptions(
+            vault_path=Path("/tmp/vault"),
+            output_path=Path("/tmp/out.tsv"),
+            sync_to_anki=True,
+            anki_deck="Lexicon",
+            anki_note_type="Basic",
+        )
         expected_result = build_scan_result()
-        calls: list[tuple[str, object, object | None]] = []
+        expected_preflight = AnkiPreflightSummary(
+            new_count=1,
+            update_count=0,
+            skip_count=0,
+            deck_name="Lexicon",
+            note_type="Basic",
+        )
+        calls: list[tuple[str, object, object | None, object | None]] = []
 
         run_preview_scan_callbacks(
             options,
-            lambda completed_options, scan_result: calls.append(("success", completed_options, scan_result)),
+            lambda completed_options, scan_result, preflight_summary, preflight_error: calls.append(
+                ("success", completed_options, scan_result, preflight_summary or preflight_error)
+            ),
             lambda error_message, details=None: calls.append(("error", error_message, details)),
             scan_fn=lambda received_options, preview_limit: expected_result,
+            preflight_fn=lambda received_options, cards: expected_preflight,
         )
 
-        self.assertEqual(calls, [("success", options, expected_result)])
+        self.assertEqual(calls, [("success", options, expected_result, expected_preflight)])
+
+    def test_run_preview_scan_callbacks_preserves_preview_when_anki_preflight_fails(self) -> None:
+        options = ExportOptions(
+            vault_path=Path("/tmp/vault"),
+            output_path=Path("/tmp/out.tsv"),
+            sync_to_anki=True,
+        )
+        expected_result = build_scan_result()
+        calls: list[tuple[str, object, object | None, object | None]] = []
+
+        run_preview_scan_callbacks(
+            options,
+            lambda completed_options, scan_result, preflight_summary, preflight_error: calls.append(
+                ("success", completed_options, preflight_summary, preflight_error)
+            ),
+            lambda error_message, details=None: calls.append(("error", error_message, details)),
+            scan_fn=lambda received_options, preview_limit: expected_result,
+            preflight_fn=lambda received_options, cards: (_ for _ in ()).throw(ExportError("Anki unavailable")),
+        )
+
+        self.assertEqual(calls, [("success", options, None, "Anki unavailable")])
 
     def test_run_preview_scan_callbacks_routes_export_errors(self) -> None:
         options = ExportOptions(vault_path=Path("/tmp/vault"), output_path=Path("/tmp/out.tsv"))

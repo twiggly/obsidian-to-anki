@@ -5,11 +5,12 @@ import traceback
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
-from ..anki.sync import fetch_anki_catalog, fetch_note_type_fields
+from ..anki.sync import build_anki_preflight_summary, fetch_anki_catalog, fetch_note_type_fields
 from ..common import PREVIEW_CARD_LIMIT, unexpected_error_message
 from ..delivery import deliver_cards
 from ..models import (
     AnkiCatalog,
+    AnkiPreflightSummary,
     AnkiFieldCatalog,
     DeliveryResult,
     ExportError,
@@ -25,13 +26,23 @@ if TYPE_CHECKING:
 
 def run_preview_scan_callbacks(
     options: ExportOptions,
-    on_success: Callable[[ExportOptions, ScanResult], None],
+    on_success: Callable[[ExportOptions, ScanResult, AnkiPreflightSummary | None, str | None], None],
     on_error: Callable[[str, str | None], None],
     scan_fn: Callable[[ExportOptions, int], ScanResult] = scan_cards,
+    preflight_fn: Callable[[ExportOptions, list], AnkiPreflightSummary] = build_anki_preflight_summary,
 ) -> None:
     try:
         scan_result = scan_fn(options, PREVIEW_CARD_LIMIT)
-        on_success(options, scan_result)
+        preflight_summary: AnkiPreflightSummary | None = None
+        preflight_error: str | None = None
+        if options.sync_to_anki:
+            try:
+                preflight_summary = preflight_fn(options, scan_result.cards)
+            except (ExportError, OSError) as exc:
+                preflight_error = str(exc)
+            except Exception:
+                preflight_error = unexpected_error_message("Anki preflight")
+        on_success(options, scan_result, preflight_summary, preflight_error)
     except (ExportError, OSError) as exc:
         on_error(str(exc), None)
     except Exception:
@@ -44,13 +55,20 @@ def run_preview_scan_callbacks(
 def start_preview_scan(
     root: tk.Misc,
     options: ExportOptions,
-    on_success: Callable[[ExportOptions, ScanResult], None],
+    on_success: Callable[[ExportOptions, ScanResult, AnkiPreflightSummary | None, str | None], None],
     on_error: Callable[[str, str | None], None],
 ) -> None:
     def worker() -> None:
         run_preview_scan_callbacks(
             options,
-            lambda completed_options, scan_result: root.after(0, on_success, completed_options, scan_result),
+            lambda completed_options, scan_result, preflight_summary, preflight_error: root.after(
+                0,
+                on_success,
+                completed_options,
+                scan_result,
+                preflight_summary,
+                preflight_error,
+            ),
             lambda error_message, details=None: root.after(0, on_error, error_message, details),
         )
 

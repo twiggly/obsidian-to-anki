@@ -15,6 +15,7 @@ from .connect_client import (
     is_duplicate_note_error,
     normalize_anki_connect_url,
     request,
+    unexpected_anki_response_message,
 )
 from .existing_notes import (
     ExistingAnkiNote,
@@ -28,11 +29,13 @@ from .existing_notes import (
 from .sync_engine import (
     add_notes_batch as add_notes_batch_impl,
     add_single_note as add_single_note_impl,
+    build_anki_preflight_summary as build_anki_preflight_summary_impl,
     build_anki_notes as build_anki_notes_impl,
     sync_cards_to_anki as sync_cards_to_anki_impl,
 )
 from ..models import (
     AnkiCatalog,
+    AnkiPreflightSummary,
     AnkiFieldCatalog,
     AnkiSyncResult,
     ExportOptions,
@@ -47,10 +50,12 @@ __all__ = [
     "AnkiCatalog",
     "AnkiConnectError",
     "AnkiFieldCatalog",
+    "AnkiPreflightSummary",
     "AnkiSyncResult",
     "ExportOptions",
     "NoteCard",
     "build_anki_notes",
+    "build_anki_preflight_summary",
     "fetch_anki_catalog",
     "fetch_note_type_fields",
     "format_anki_error",
@@ -66,7 +71,7 @@ def invoke_anki_connect(url: str, action: str, params: dict[str, object] | None 
 def _invoke_anki_connect_multi(url: str, actions: Sequence[dict[str, object]]) -> list[object]:
     results = invoke_anki_connect(url, "multi", {"actions": list(actions)})
     if not isinstance(results, list):
-        raise AnkiConnectError("Received an unexpected response from AnkiConnect multi.")
+        raise AnkiConnectError(unexpected_anki_response_message("multi"))
     return results
 
 
@@ -155,4 +160,19 @@ def sync_cards_to_anki(options: ExportOptions, cards: Sequence[NoteCard]) -> Ank
         add_single_note_fn=_add_single_note,
         is_duplicate_note_error_fn=is_duplicate_note_error,
         build_existing_note_snapshot_fn=_build_existing_note_snapshot,
+    )
+
+
+def build_anki_preflight_summary(
+    options: ExportOptions,
+    cards: Sequence[NoteCard],
+) -> AnkiPreflightSummary:
+    return build_anki_preflight_summary_impl(
+        options,
+        cards,
+        validate_anki_target_fn=_validate_anki_target,
+        build_anki_notes_fn=build_anki_notes,
+        fetch_existing_notes_by_front_fn=_fetch_existing_notes_by_front,
+        invoke_anki_connect_fn=invoke_anki_connect,
+        build_existing_note_update_plan_fn=_build_existing_note_update_plan,
     )
