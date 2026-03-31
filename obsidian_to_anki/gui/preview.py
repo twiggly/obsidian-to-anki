@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable
 
-from ..common import format_target_tags
-from ..models import ExportOptions, ScanResult
+from ..common import duplicate_handling_display_label, format_target_tags
+from ..models import AnkiPreflightSummary, ExportOptions, ScanResult
 from ..rendering import populate_preview_text_widget
 
 if TYPE_CHECKING:
@@ -18,18 +18,49 @@ else:
         ttk = None
 
 
-def build_preview_info_text(options: ExportOptions, scan_result: ScanResult) -> str:
-    info_text = (
-        f"Showing the first {len(scan_result.preview_cards)} of {scan_result.total_matches} "
-        f"matching cards for {format_target_tags(options.target_tag, options.additional_target_tags)}."
-    )
+def build_anki_preflight_text(
+    summary: AnkiPreflightSummary | None,
+    error_message: str | None = None,
+) -> str | None:
+    if summary is not None:
+        parts: list[str] = [f"{summary.new_count} new"]
+        if summary.update_count:
+            noun = "update" if summary.update_count == 1 else "updates"
+            parts.append(f"{summary.update_count} {noun}")
+        if summary.skip_count:
+            noun = "skip" if summary.skip_count == 1 else "skips"
+            parts.append(f"{summary.skip_count} {noun}")
+        return "Anki preflight: " + ", ".join(parts) + "."
+    if error_message:
+        return f"Anki preflight unavailable: {error_message}."
+    return None
+
+
+def build_preview_info_text(
+    options: ExportOptions,
+    scan_result: ScanResult,
+    anki_preflight_summary: AnkiPreflightSummary | None = None,
+    anki_preflight_error: str | None = None,
+) -> str:
+    lines = [
+        (
+            f"Showing the first {len(scan_result.preview_cards)} of {scan_result.total_matches} "
+            f"matching cards for {format_target_tags(options.target_tag, options.additional_target_tags)}."
+        )
+    ]
     if options.include_folders:
-        info_text += " Included folders: " + ", ".join(options.include_folders)
+        lines.append("Included folders: " + ", ".join(options.include_folders) + ".")
     if options.sync_to_anki:
-        info_text += f" Anki target: {options.anki_deck} / {options.anki_note_type}."
+        lines.append(f"Anki target: {options.anki_deck} / {options.anki_note_type}.")
+        lines.append(
+            f"Duplicate handling: {duplicate_handling_display_label(options.duplicate_handling)}."
+        )
+        preflight_text = build_anki_preflight_text(anki_preflight_summary, anki_preflight_error)
+        if preflight_text is not None:
+            lines.append(preflight_text)
     if scan_result.duplicate_fronts:
-        info_text += f" Duplicate fronts: {len(scan_result.duplicate_fronts)}."
-    return info_text
+        lines.append(f"Duplicate fronts: {len(scan_result.duplicate_fronts)}.")
+    return "\n".join(lines)
 
 
 def close_dialog_and_run_action(dialog: object, on_confirm: Callable[[], None]) -> None:
@@ -43,6 +74,8 @@ def show_preview_dialog(
     scan_result: ScanResult,
     on_confirm: Callable[[], None],
     action_label: str = "Export",
+    anki_preflight_summary: AnkiPreflightSummary | None = None,
+    anki_preflight_error: str | None = None,
 ) -> None:
     if tk is None or ttk is None:
         raise RuntimeError("Tkinter is not available in this Python installation.")
@@ -63,7 +96,16 @@ def show_preview_dialog(
     container.columnconfigure(1, weight=1)
     container.rowconfigure(1, weight=1)
 
-    info = ttk.Label(container, text=build_preview_info_text(options, scan_result))
+    info = ttk.Label(
+        container,
+        text=build_preview_info_text(
+            options,
+            scan_result,
+            anki_preflight_summary=anki_preflight_summary,
+            anki_preflight_error=anki_preflight_error,
+        ),
+        justify="left",
+    )
     info.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 12))
 
     list_frame = ttk.Frame(container)

@@ -3,9 +3,9 @@ from __future__ import annotations
 from time import perf_counter
 from typing import Callable, Sequence
 
-from .connect_client import AnkiConnectError
+from .connect_client import AnkiConnectError, unexpected_anki_response_message
 from .existing_notes import ExistingAnkiNote, PendingExistingNoteUpdate
-from ..models import AnkiSyncResult, AnkiSyncTiming, ExportOptions, NoteCard
+from ..models import AnkiPreflightSummary, AnkiSyncResult, AnkiSyncTiming, ExportOptions, NoteCard
 
 
 def build_anki_notes(options: ExportOptions, cards: Sequence[NoteCard]) -> list[dict[str, object]]:
@@ -35,12 +35,12 @@ def add_notes_batch(
 
     note_ids = invoke_anki_connect_fn(url, "addNotes", {"notes": list(notes)})
     if not isinstance(note_ids, list) or len(note_ids) != len(notes):
-        raise AnkiConnectError("Received an unexpected response from addNotes.")
+        raise AnkiConnectError(unexpected_anki_response_message("addNotes"))
     if not all(
         note_id is None or (isinstance(note_id, int) and not isinstance(note_id, bool))
         for note_id in note_ids
     ):
-        raise AnkiConnectError("Received an unexpected response from addNotes.")
+        raise AnkiConnectError(unexpected_anki_response_message("addNotes"))
     return note_ids
 
 
@@ -98,7 +98,7 @@ def sync_cards_to_anki(
     can_add = invoke_anki_connect_fn(options.anki_connect_url, "canAddNotes", {"notes": notes})
     can_add_seconds = perf_counter() - can_add_started_at
     if not isinstance(can_add, list) or len(can_add) != len(notes):
-        raise AnkiConnectError("Received an unexpected response from canAddNotes.")
+        raise AnkiConnectError(unexpected_anki_response_message("canAddNotes"))
     added_count = 0
     skipped_count = 0
     updated_count = 0
@@ -191,4 +191,63 @@ def sync_cards_to_anki(
             write_seconds=write_seconds,
             total_seconds=perf_counter() - sync_started_at,
         ),
+    )
+
+
+def build_anki_preflight_summary(
+    options: ExportOptions,
+    cards: Sequence[NoteCard],
+    *,
+    validate_anki_target_fn: Callable[[ExportOptions], None],
+    build_anki_notes_fn: Callable[[ExportOptions, Sequence[NoteCard]], list[dict[str, object]]],
+    fetch_existing_notes_by_front_fn: Callable[[ExportOptions], dict[str, list[ExistingAnkiNote]]],
+    invoke_anki_connect_fn: Callable[[str, str, dict[str, object] | None], object],
+    build_existing_note_update_plan_fn: Callable[
+        [ExportOptions, dict[str, object], dict[str, list[ExistingAnkiNote]]],
+        PendingExistingNoteUpdate | None,
+    ],
+) -> AnkiPreflightSummary:
+    if not cards:
+        return AnkiPreflightSummary(
+            new_count=0,
+            update_count=0,
+            skip_count=0,
+            deck_name=options.anki_deck,
+            note_type=options.anki_note_type,
+        )
+
+    validate_anki_target_fn(options)
+    notes = build_anki_notes_fn(options, cards)
+    existing_notes_by_front: dict[str, list[ExistingAnkiNote]] = {}
+    if options.anki_existing_notes == "update":
+        existing_notes_by_front = fetch_existing_notes_by_front_fn(options)
+
+    can_add = invoke_anki_connect_fn(options.anki_connect_url, "canAddNotes", {"notes": notes})
+    if not isinstance(can_add, list) or len(can_add) != len(notes):
+        raise AnkiConnectError(unexpected_anki_response_message("canAddNotes"))
+
+    new_count = 0
+    update_count = 0
+    skip_count = 0
+    for note, allowed in zip(notes, can_add):
+        if allowed:
+            new_count += 1
+            continue
+        if options.anki_existing_notes == "update":
+            update_plan = build_existing_note_update_plan_fn(
+                options,
+                note,
+                existing_notes_by_front,
+            )
+            if update_plan is not None:
+                update_count += 1
+                continue
+        skip_count += 1
+
+    return AnkiPreflightSummary(
+        new_count=new_count,
+        update_count=update_count,
+        skip_count=skip_count,
+        deck_name=options.anki_deck,
+        note_type=options.anki_note_type,
     )

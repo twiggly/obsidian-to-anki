@@ -19,7 +19,8 @@ class AnkiConnectClientTests(unittest.TestCase):
             with self.assertRaises(AnkiConnectError) as context:
                 invoke_anki_connect("http://127.0.0.1:8765", "deckNames")
 
-        self.assertIn("Could not reach AnkiConnect", str(context.exception))
+        self.assertIn("Couldn't reach AnkiConnect", str(context.exception))
+        self.assertIn("Open Anki", str(context.exception))
 
     def test_invoke_anki_connect_multi_returns_empty_list_for_no_actions(self) -> None:
         self.assertEqual(invoke_anki_connect_multi("http://127.0.0.1:8765", []), [])
@@ -32,7 +33,10 @@ class AnkiConnectClientTests(unittest.TestCase):
                     [{"action": "deckNames"}, {"action": "modelNames"}],
                 )
 
-        self.assertEqual(str(context.exception), "Received an unexpected response from multi.")
+        self.assertEqual(
+            str(context.exception),
+            "AnkiConnect returned an unexpected response while running 'multi'.",
+        )
 
     def test_duplicate_note_error_helper_handles_lists(self) -> None:
         self.assertTrue(

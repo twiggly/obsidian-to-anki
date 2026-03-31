@@ -7,6 +7,7 @@ from obsidian_to_anki.gui import ExporterApp
 from obsidian_to_anki.gui.logic import FormValidationError
 from obsidian_to_anki.models import (
     AnkiCatalog,
+    AnkiPreflightSummary,
     AnkiFieldCatalog,
     AnkiSyncResult,
     DeliveryResult,
@@ -390,6 +391,54 @@ class GuiControllerTests(unittest.TestCase):
         callback = show_preview_dialog.call_args.kwargs["on_confirm"]
         callback()
         app.begin_delivery.assert_called_once_with(options, scan_result)
+
+    def test_finish_preview_success_passes_anki_preflight_summary_to_dialog(self) -> None:
+        app = build_controller()
+        options = ExportOptions(
+            vault_path=Path("/tmp/vault"),
+            output_path=Path("/tmp/out.tsv"),
+            sync_to_anki=True,
+            anki_deck="Lexicon",
+            anki_note_type="Basic",
+            duplicate_handling="skip",
+        )
+        scan_result = build_scan_result()
+        preflight_summary = AnkiPreflightSummary(
+            new_count=3,
+            update_count=1,
+            skip_count=0,
+            deck_name="Lexicon",
+            note_type="Basic",
+        )
+
+        with (
+            mock.patch.object(gui, "messagebox", mock.Mock()),
+            mock.patch.object(gui, "show_preview_dialog") as show_preview_dialog,
+        ):
+            ExporterApp.finish_preview_success(app, options, scan_result, preflight_summary, None)
+
+        self.assertEqual(show_preview_dialog.call_args.kwargs["anki_preflight_summary"], preflight_summary)
+
+    def test_finish_preview_success_logs_anki_preflight_error(self) -> None:
+        app = build_controller()
+        options = ExportOptions(
+            vault_path=Path("/tmp/vault"),
+            output_path=Path("/tmp/out.tsv"),
+            sync_to_anki=True,
+            duplicate_handling="skip",
+        )
+        scan_result = build_scan_result()
+
+        with (
+            mock.patch.object(gui, "messagebox", mock.Mock()),
+            mock.patch.object(gui, "show_preview_dialog"),
+        ):
+            ExporterApp.finish_preview_success(app, options, scan_result, None, "Anki unavailable")
+
+        self.assertEqual(
+            app.log.call_args_list[-1].args[0],
+            "Anki preflight unavailable: Anki unavailable",
+        )
 
     def test_finish_preview_success_stops_after_warning_in_error_mode(self) -> None:
         app = build_controller()

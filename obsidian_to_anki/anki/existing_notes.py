@@ -4,7 +4,12 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Callable, Sequence
 
-from .connect_client import AnkiConnectError, invoke_anki_connect, invoke_anki_connect_multi
+from .connect_client import (
+    AnkiConnectError,
+    invoke_anki_connect,
+    invoke_anki_connect_multi,
+    unexpected_anki_response_message,
+)
 from ..models import ExportOptions
 
 
@@ -80,7 +85,7 @@ def fetch_existing_notes_by_front(
         {"query": query},
     )
     if not isinstance(note_ids, list) or not all(isinstance(note_id, int) for note_id in note_ids):
-        raise AnkiConnectError("Received an unexpected response from findNotes.")
+        raise AnkiConnectError(unexpected_anki_response_message("findNotes"))
     if not note_ids:
         return {}
 
@@ -90,31 +95,31 @@ def fetch_existing_notes_by_front(
         {"notes": note_ids},
     )
     if not isinstance(note_infos, list):
-        raise AnkiConnectError("Received an unexpected response from notesInfo.")
+        raise AnkiConnectError(unexpected_anki_response_message("notesInfo"))
 
     existing_notes: dict[str, list[ExistingAnkiNote]] = defaultdict(list)
     for note_info in note_infos:
         if not isinstance(note_info, dict):
-            raise AnkiConnectError("Received an unexpected response from notesInfo.")
+            raise AnkiConnectError(unexpected_anki_response_message("notesInfo"))
         note_id = note_info.get("noteId")
         if isinstance(note_id, bool) or not isinstance(note_id, int):
-            raise AnkiConnectError("Received an unexpected response from notesInfo.")
+            raise AnkiConnectError(unexpected_anki_response_message("notesInfo"))
         if note_info.get("modelName") != options.anki_note_type:
             continue
         fields = note_info.get("fields")
         if not isinstance(fields, dict):
-            raise AnkiConnectError("Received an unexpected response from notesInfo.")
+            raise AnkiConnectError(unexpected_anki_response_message("notesInfo"))
         normalized_fields: dict[str, str] = {}
         for field_name, field_value in fields.items():
             if not isinstance(field_name, str) or not isinstance(field_value, dict):
-                raise AnkiConnectError("Received an unexpected response from notesInfo.")
+                raise AnkiConnectError(unexpected_anki_response_message("notesInfo"))
             normalized_value = field_value.get("value")
             if not isinstance(normalized_value, str):
-                raise AnkiConnectError("Received an unexpected response from notesInfo.")
+                raise AnkiConnectError(unexpected_anki_response_message("notesInfo"))
             normalized_fields[field_name] = normalized_value
         tags = note_info.get("tags")
         if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
-            raise AnkiConnectError("Received an unexpected response from notesInfo.")
+            raise AnkiConnectError(unexpected_anki_response_message("notesInfo"))
         front_field = fields.get(options.anki_front_field)
         if not isinstance(front_field, dict):
             continue

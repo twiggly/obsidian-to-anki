@@ -4,7 +4,7 @@ from unittest import mock
 
 from obsidian_to_anki.anki.connect_client import AnkiConnectError
 from obsidian_to_anki.anki.existing_notes import ExistingAnkiNote, build_existing_note_snapshot, build_existing_note_update_plan
-from obsidian_to_anki.anki.sync_engine import build_anki_notes, sync_cards_to_anki
+from obsidian_to_anki.anki.sync_engine import build_anki_notes, build_anki_preflight_summary, sync_cards_to_anki
 from obsidian_to_anki.models import ExportOptions, NoteCard
 
 
@@ -39,6 +39,47 @@ def build_options(existing_notes: str = "skip") -> ExportOptions:
 
 
 class AnkiSyncEngineTests(unittest.TestCase):
+    def test_build_anki_preflight_summary_counts_new_and_skipped_notes(self) -> None:
+        summary = build_anki_preflight_summary(
+            build_options(),
+            build_cards(),
+            validate_anki_target_fn=lambda options: None,
+            build_anki_notes_fn=build_anki_notes,
+            fetch_existing_notes_by_front_fn=lambda options: {},
+            invoke_anki_connect_fn=lambda url, action, params=None: [True, False],
+            build_existing_note_update_plan_fn=build_existing_note_update_plan,
+        )
+
+        self.assertEqual(summary.new_count, 1)
+        self.assertEqual(summary.update_count, 0)
+        self.assertEqual(summary.skip_count, 1)
+        self.assertEqual(summary.deck_name, "Lexicon")
+
+    def test_build_anki_preflight_summary_counts_updates_when_enabled(self) -> None:
+        existing_notes_by_front = {
+            "colloquy": [
+                ExistingAnkiNote(
+                    note_id=101,
+                    fields={"Front": "colloquy", "Back": "old"},
+                    tags=frozenset(),
+                )
+            ]
+        }
+
+        summary = build_anki_preflight_summary(
+            build_options(existing_notes="update"),
+            build_cards(),
+            validate_anki_target_fn=lambda options: None,
+            build_anki_notes_fn=build_anki_notes,
+            fetch_existing_notes_by_front_fn=lambda options: existing_notes_by_front,
+            invoke_anki_connect_fn=lambda url, action, params=None: [True, False],
+            build_existing_note_update_plan_fn=build_existing_note_update_plan,
+        )
+
+        self.assertEqual(summary.new_count, 1)
+        self.assertEqual(summary.update_count, 1)
+        self.assertEqual(summary.skip_count, 0)
+
     def test_sync_cards_to_anki_skips_existing_notes(self) -> None:
         invoke = mock.Mock(return_value=[True, False])
         add_notes_batch = mock.Mock(return_value=[123456789])

@@ -88,7 +88,7 @@ from .view import (
     sync_output_option_state,
 )
 from .widgets import render_tag_chips
-from ..models import AnkiCatalog, AnkiFieldCatalog, DeliveryResult, ExportOptions, ScanResult
+from ..models import AnkiCatalog, AnkiFieldCatalog, AnkiPreflightSummary, DeliveryResult, ExportOptions, ScanResult
 
 if TYPE_CHECKING:
     import tkinter as tk
@@ -495,11 +495,19 @@ class ExporterApp:
             start_preview_scan=start_preview_scan,
         )
 
-    def finish_preview_success(self, options: ExportOptions, scan_result: ScanResult) -> None:
+    def finish_preview_success(
+        self,
+        options: ExportOptions,
+        scan_result: ScanResult,
+        anki_preflight_summary: AnkiPreflightSummary | None = None,
+        anki_preflight_error: str | None = None,
+    ) -> None:
         finish_preview_success_helper(
             self,
             options,
             scan_result,
+            anki_preflight_summary,
+            anki_preflight_error,
             preview_no_matches_message=preview_no_matches_message,
             preview_ready_message=preview_ready_message,
             timing_breakdown_lines=timing_breakdown_lines,

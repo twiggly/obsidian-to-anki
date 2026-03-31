@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from ..models import DeliveryResult, ExportOptions, ScanResult
+from ..models import AnkiPreflightSummary, DeliveryResult, ExportOptions, ScanResult
 
 
 def set_busy(app: object, busy: bool) -> None:
@@ -55,7 +55,12 @@ def start_preview(
     start_preview_scan(
         app.root,
         preview_options,
-        lambda _completed_options, scan_result: app.finish_preview_success(options, scan_result),
+        lambda _completed_options, scan_result, preflight_summary, preflight_error: app.finish_preview_success(
+            options,
+            scan_result,
+            preflight_summary,
+            preflight_error,
+        ),
         app.finish_preview_error,
     )
 
@@ -64,6 +69,8 @@ def finish_preview_success(
     app: object,
     options: ExportOptions,
     scan_result: ScanResult,
+    anki_preflight_summary: AnkiPreflightSummary | None,
+    anki_preflight_error: str | None,
     *,
     preview_no_matches_message: Callable[[str, tuple[str, ...], tuple[str, ...]], str],
     preview_ready_message: Callable[[ScanResult], str],
@@ -105,10 +112,15 @@ def finish_preview_success(
             app.log(stop_message)
             return
 
+    if anki_preflight_error is not None:
+        app.log(f"Anki preflight unavailable: {anki_preflight_error}")
+
     show_preview_dialog(
         app.root,
         options,
         scan_result,
+        anki_preflight_summary=anki_preflight_summary,
+        anki_preflight_error=anki_preflight_error,
         on_confirm=lambda: app.begin_delivery(options, scan_result),
         action_label=delivery_action_label(options),
     )

@@ -16,6 +16,10 @@ class AnkiConnectError(ExportError):
         self.raw_error = raw_error
 
 
+def unexpected_anki_response_message(action: str) -> str:
+    return f"AnkiConnect returned an unexpected response while running '{action}'."
+
+
 def format_anki_error(error_value: object) -> str:
     if isinstance(error_value, list):
         return "; ".join(str(item) for item in error_value)
@@ -33,7 +37,7 @@ def is_duplicate_note_error(error_value: object) -> bool:
 def normalize_anki_connect_url(url: str) -> str:
     normalized = url.strip().rstrip("/")
     if not normalized:
-        raise AnkiConnectError("AnkiConnect URL is required when syncing to Anki.")
+        raise AnkiConnectError("Enter an AnkiConnect URL to sync directly to Anki.")
     return normalized
 
 
@@ -58,13 +62,15 @@ def invoke_anki_connect(url: str, action: str, params: dict[str, Any] | None = N
             body = json.load(response)
     except (error.URLError, TimeoutError, OSError) as exc:
         raise AnkiConnectError(
-            f"Could not reach AnkiConnect at {normalized_url}. Make sure Anki is running and the AnkiConnect add-on is installed."
+            f"Couldn't reach AnkiConnect at {normalized_url}. Open Anki and make sure the AnkiConnect add-on is installed."
         ) from exc
     except json.JSONDecodeError as exc:
-        raise AnkiConnectError("Received an invalid response from AnkiConnect.") from exc
+        raise AnkiConnectError(
+            "AnkiConnect returned invalid data. Try reopening Anki and trying again."
+        ) from exc
 
     if not isinstance(body, dict) or "result" not in body or "error" not in body:
-        raise AnkiConnectError("Received an unexpected response from AnkiConnect.")
+        raise AnkiConnectError(unexpected_anki_response_message(action))
 
     if body["error"] is not None:
         raise AnkiConnectError(format_anki_error(body["error"]), raw_error=body["error"])
@@ -77,5 +83,5 @@ def invoke_anki_connect_multi(url: str, actions: Sequence[dict[str, object]]) ->
         return []
     results = invoke_anki_connect(url, "multi", {"actions": list(actions)})
     if not isinstance(results, list) or len(results) != len(actions):
-        raise AnkiConnectError("Received an unexpected response from multi.")
+        raise AnkiConnectError(unexpected_anki_response_message("multi"))
     return results

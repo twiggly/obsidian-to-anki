@@ -59,6 +59,15 @@ class AnkiSyncTiming:
 
 
 @dataclass(frozen=True)
+class AnkiPreflightSummary:
+    new_count: int
+    update_count: int
+    skip_count: int
+    deck_name: str
+    note_type: str
+
+
+@dataclass(frozen=True)
 class AnkiSyncResult:
     added_count: int
     skipped_count: int
