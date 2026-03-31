@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ..common import ANKI_EXISTING_NOTE_CHOICES, DUPLICATE_HANDLING_DISPLAY_CHOICES
-from .widgets import attach_tooltip
+from .widgets import attach_tooltip, chip_tray_frame_kwargs
 
 if TYPE_CHECKING:
     import tkinter as tk
@@ -81,16 +81,7 @@ def build_source_section(app: object, parent: object) -> object:
     app.tag_combobox.bind("<<ComboboxSelected>>", app.add_selected_tag)
     app.tag_combobox.bind("<Return>", app.add_selected_tag)
     app.tag_combobox.bind("<FocusOut>", app.add_selected_tag)
-    app.selected_tags_container = tk.Frame(
-        source,
-        background="#2a2a2a",
-        borderwidth=1,
-        relief="solid",
-        highlightthickness=0,
-        highlightbackground="#404040",
-        padx=6,
-        pady=4,
-    )
+    app.selected_tags_container = tk.Frame(source, **chip_tray_frame_kwargs(source))
     app.selected_tags_container.grid(row=3, column=1, sticky="ew", padx=(10, 10), pady=(4, 0))
     app.tag_scan_button = ttk.Button(source, text="Find Tags…", command=app.scan_vault_tags)
     app.tag_scan_button.grid(row=2, column=2, sticky="ew", pady=(4, 0))
@@ -102,16 +93,7 @@ def build_source_section(app: object, parent: object) -> object:
         "Optionally limit the scan to specific folders inside the vault. "
         "Leave this empty to scan the whole vault.",
     )
-    app.folder_filters_container = tk.Frame(
-        source,
-        background="#2a2a2a",
-        borderwidth=1,
-        relief="solid",
-        highlightthickness=0,
-        highlightbackground="#404040",
-        padx=6,
-        pady=4,
-    )
+    app.folder_filters_container = tk.Frame(source, **chip_tray_frame_kwargs(source))
     app.folder_filters_container.grid(row=4, column=1, sticky="ew", padx=(10, 10), pady=(4, 0))
 
     app.add_folder_button = ttk.Button(source, text="Add Folder…", command=app.add_folder_filter)

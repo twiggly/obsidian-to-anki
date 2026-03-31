@@ -10,7 +10,12 @@ from obsidian_to_anki.gui.view import (
     sync_html_option_state,
     sync_output_option_state,
 )
-from obsidian_to_anki.gui.widgets import attach_tooltip, resolve_relative_tooltip_position
+from obsidian_to_anki.gui.widgets import (
+    attach_tooltip,
+    chip_palette,
+    resolve_relative_tooltip_position,
+    resolve_system_color,
+)
 
 
 class FakeCheckbutton:
@@ -51,6 +56,16 @@ class FakeRoot:
 
     def bind(self, event_name: str, callback: object, add: str | None = None) -> None:
         self.bindings.append((event_name, callback, add or ""))
+
+
+class FakeColorWidget:
+    def __init__(self, supported_colors: set[str]) -> None:
+        self.supported_colors = supported_colors
+
+    def winfo_rgb(self, color_name: str) -> tuple[int, int, int]:
+        if color_name not in self.supported_colors:
+            raise RuntimeError("unsupported color")
+        return (0, 0, 0)
 
 
 class OptionBehaviorTests(unittest.TestCase):
@@ -171,6 +186,35 @@ class OptionBehaviorTests(unittest.TestCase):
         )
 
         self.assertEqual(position, (608, 152))
+
+    def test_resolve_system_color_falls_back_when_system_color_is_unsupported(self) -> None:
+        widget = FakeColorWidget({"systemTextColor"})
+
+        self.assertEqual(
+            resolve_system_color(widget, "systemSeparatorColor", "#404040"),
+            "#404040",
+        )
+        self.assertEqual(
+            resolve_system_color(widget, "systemTextColor", "#ededed"),
+            "systemTextColor",
+        )
+
+    def test_chip_palette_uses_supported_system_colors(self) -> None:
+        widget = FakeColorWidget(
+            {
+                "systemTextBackgroundColor",
+                "systemSeparatorColor",
+                "systemSecondaryLabelColor",
+                "systemControlBackgroundColor",
+                "systemTextColor",
+            }
+        )
+
+        palette = chip_palette(widget)
+
+        self.assertEqual(palette["tray_background"], "systemTextBackgroundColor")
+        self.assertEqual(palette["chip_background"], "systemControlBackgroundColor")
+        self.assertEqual(palette["chip_text_foreground"], "systemTextColor")
 
     def test_unexpected_error_message_points_users_to_the_log(self) -> None:
         self.assertEqual(

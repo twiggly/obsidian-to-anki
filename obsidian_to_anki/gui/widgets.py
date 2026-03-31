@@ -17,6 +17,76 @@ else:
         ttk = None
 
 
+DEFAULT_CHIP_PALETTE = {
+    "tray_background": "#2a2a2a",
+    "tray_border": "#404040",
+    "placeholder_foreground": "#a4a4a4",
+    "chip_background": "#343434",
+    "chip_border": "#4a4a4a",
+    "chip_text_foreground": "#ededed",
+    "chip_remove_foreground": "#939393",
+    "chip_remove_hover_foreground": "#bebebe",
+}
+
+
+def resolve_system_color(widget: object | None, color_name: str, fallback: str) -> str:
+    if widget is None:
+        return fallback
+    try:
+        widget.winfo_rgb(color_name)
+    except Exception:
+        return fallback
+    return color_name
+
+
+def chip_palette(widget: object | None) -> dict[str, str]:
+    return {
+        "tray_background": resolve_system_color(
+            widget, "systemTextBackgroundColor", DEFAULT_CHIP_PALETTE["tray_background"]
+        ),
+        "tray_border": resolve_system_color(
+            widget, "systemSeparatorColor", DEFAULT_CHIP_PALETTE["tray_border"]
+        ),
+        "placeholder_foreground": resolve_system_color(
+            widget,
+            "systemSecondaryLabelColor",
+            DEFAULT_CHIP_PALETTE["placeholder_foreground"],
+        ),
+        "chip_background": resolve_system_color(
+            widget,
+            "systemControlBackgroundColor",
+            DEFAULT_CHIP_PALETTE["chip_background"],
+        ),
+        "chip_border": resolve_system_color(
+            widget, "systemSeparatorColor", DEFAULT_CHIP_PALETTE["chip_border"]
+        ),
+        "chip_text_foreground": resolve_system_color(
+            widget, "systemTextColor", DEFAULT_CHIP_PALETTE["chip_text_foreground"]
+        ),
+        "chip_remove_foreground": resolve_system_color(
+            widget,
+            "systemSecondaryLabelColor",
+            DEFAULT_CHIP_PALETTE["chip_remove_foreground"],
+        ),
+        "chip_remove_hover_foreground": resolve_system_color(
+            widget, "systemTextColor", DEFAULT_CHIP_PALETTE["chip_remove_hover_foreground"]
+        ),
+    }
+
+
+def chip_tray_frame_kwargs(widget: object | None = None) -> dict[str, object]:
+    palette = chip_palette(widget)
+    return {
+        "background": palette["tray_background"],
+        "borderwidth": 1,
+        "relief": "solid",
+        "highlightthickness": 0,
+        "highlightbackground": palette["tray_border"],
+        "padx": 6,
+        "pady": 4,
+    }
+
+
 def resolve_relative_tooltip_position(
     label_left: int,
     label_top: int,
@@ -194,16 +264,14 @@ def render_tag_chips(
         for child in existing_children:
             child.destroy()
 
-        tray_background = "#2a2a2a"
-        chip_background = "#343434"
-        chip_border = "#4a4a4a"
+        palette = chip_palette(container)
         remove_buttons: list[object] = []
         if not values:
             placeholder = tk.Label(
                 container,
                 text=empty_text,
-                background=tray_background,
-                foreground="#a4a4a4",
+                background=palette["tray_background"],
+                foreground=palette["placeholder_foreground"],
                 padx=2,
                 pady=2,
             )
@@ -224,19 +292,19 @@ def render_tag_chips(
         for value in values:
             chip = tk.Frame(
                 container,
-                background=chip_background,
+                background=palette["chip_background"],
                 borderwidth=1,
                 relief="solid",
                 highlightthickness=0,
-                highlightbackground=chip_border,
+                highlightbackground=palette["chip_border"],
             )
             chip.grid(row=row, column=column, sticky="w", padx=(0, 6), pady=2)
 
             label = tk.Label(
                 chip,
                 text=value,
-                background=chip_background,
-                foreground="#ededed",
+                background=palette["chip_background"],
+                foreground=palette["chip_text_foreground"],
                 padx=8,
                 pady=2,
                 font=chip_font,
@@ -246,8 +314,8 @@ def render_tag_chips(
             remove_button = tk.Label(
                 chip,
                 text="×",
-                background=chip_background,
-                foreground="#939393",
+                background=palette["chip_background"],
+                foreground=palette["chip_remove_foreground"],
                 cursor="" if disabled else "hand2",
                 padx=3,
                 pady=2,
@@ -257,11 +325,15 @@ def render_tag_chips(
                 remove_button.bind("<Button-1>", lambda _event, selected=value: on_remove(selected))
                 remove_button.bind(
                     "<Enter>",
-                    lambda _event, widget=remove_button: widget.configure(foreground="#bebebe"),
+                    lambda _event, widget=remove_button: widget.configure(
+                        foreground=palette["chip_remove_hover_foreground"]
+                    ),
                 )
                 remove_button.bind(
                     "<Leave>",
-                    lambda _event, widget=remove_button: widget.configure(foreground="#939393"),
+                    lambda _event, widget=remove_button: widget.configure(
+                        foreground=palette["chip_remove_foreground"]
+                    ),
                 )
             remove_button.pack(side="left")
             remove_buttons.append(remove_button)
