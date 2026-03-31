@@ -1,12 +1,14 @@
 # Obsidian to Anki
 
-Convert Obsidian notes tagged with `#definition` into an Anki-importable TSV file or sync them directly to Anki.
+Convert Obsidian notes matching one or more selected tags into an Anki-importable TSV file or sync them directly to Anki.
 
 The project supports:
 
 - a command-line workflow
 - a desktop Tkinter UI
 - optional direct sync to Anki through [AnkiConnect](https://github.com/FooSoft/anki-connect)
+- duplicate handling for same-front notes
+- both TSV export and direct Anki sync in the same run
 
 ## Install
 
@@ -34,11 +36,27 @@ or:
 python3 main.py
 ```
 
+or, using the package entrypoint directly:
+
+```bash
+python3 -m obsidian_to_anki
+```
+
+The GUI flow is:
+
+1. choose a vault
+2. optionally keep TSV export enabled and choose an output file
+3. select one or more tags to match
+4. optionally limit the scan to specific folders
+5. preview the first matching cards before exporting or syncing, unless duplicate handling is set to `error` and duplicates must be resolved first
+
 When direct Anki sync is enabled in the GUI:
 
-- `Load from Anki` populates the deck and note type dropdowns from AnkiConnect
-- the front and back field dropdowns refresh automatically for the selected note type
+- the connection indicator checks AnkiConnect automatically
+- the deck and note type dropdowns populate from AnkiConnect
+- existing notes can be skipped or updated
 - the last-used GUI settings are restored the next time you open the app
+- the status area keeps a compact summary by default, with expandable details
 
 ### CLI
 
@@ -106,10 +124,11 @@ Examples with `suffix`:
 Direct sync uses [AnkiConnect](https://github.com/FooSoft/anki-connect). In both the CLI and GUI you can:
 
 - pick a deck and note type
-- map the front and back fields from the selected note type
 - choose how existing notes are handled:
   - `skip`: leave existing Anki notes unchanged
   - `update`: update matching Anki notes instead of skipping them
+
+In the GUI, deck and note type choices are loaded from AnkiConnect and the app auto-selects front and back fields from the available field list. In the CLI, you can still specify the front and back fields explicitly.
 
 Matching existing notes are identified by the selected note type and the configured front field value.
 
@@ -191,10 +210,16 @@ That means you can style Anki cards with CSS like:
 
 ## Project Layout
 
-The project is split into small modules by responsibility:
+The app code now lives in the `obsidian_to_anki/` package, with:
+
+- `obsidian_to_anki/__main__.py` for `python3 -m obsidian_to_anki`
+- a small top-level `main.py` compatibility wrapper for `python3 main.py`
+
+Key modules inside `obsidian_to_anki/`:
 
 - `cli.py`: command-line argument parsing and entrypoint
-- `anki_sync.py`: direct AnkiConnect validation and sync
+- `anki/`: direct AnkiConnect client, catalog, existing-note lookup, and sync engine
+- `anki_sync.py`: compatibility facade for the `anki/` subpackage
 - `delivery.py`: shared export and sync orchestration
 - `scanner.py`: compatibility facade for note scanning helpers
 - `scan_filters.py`: vault path and folder filtering logic
@@ -204,13 +229,11 @@ The project is split into small modules by responsibility:
 - `body_cleanup.py`: note-body cleanup before export
 - `html_render.py`: HTML rendering and dictionary-entry formatting
 - `preview_render.py`: preview text conversion and preview widget population
-- `gui.py`: GUI controller
-- `gui_view.py`: Tk widget construction and picker/listbox behavior
-- `gui_logic.py`: pure GUI form and message helpers
-- `gui_settings.py`: GUI settings persistence
-- `gui_tasks.py`: preview/export background task wiring
-- `gui_preview.py`: preview dialog
-- `reporting.py`: post-run duplicate and sync report writing
+- `gui/`: GUI controller, view, widget, task, and settings modules
+- `gui_*.py`: compatibility facades for the `gui/` subpackage
+- `reporting.py`: post-run duplicate and sync reporting
+
+The test suite now lives in the `tests/` package.
 
 ## Tests
 
@@ -223,7 +246,7 @@ make test
 or:
 
 ```bash
-python3 -m unittest -v
+python3 -m unittest discover -s tests -v
 ```
 
 ## Branch and PR Workflow

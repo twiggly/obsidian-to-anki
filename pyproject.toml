@@ -5,35 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "obsidian-to-anki"
 version = "0.1.0"
-description = "Convert Obsidian notes tagged with #definition into Anki TSV cards."
+description = "Convert Obsidian notes matching selected tags into Anki TSV cards."
 readme = "README.md"
 requires-python = ">=3.10"
 
 [project.scripts]
-obsidian-to-anki = "cli:main"
+obsidian-to-anki = "obsidian_to_anki.cli:main"
 
-[tool.setuptools]
-py-modules = [
-    "anki_sync",
-    "body_cleanup",
-    "cli",
-    "common",
-    "delivery",
-    "exporting",
-    "gui",
-    "gui_settings",
-    "gui_logic",
-    "gui_preview",
-    "gui_tasks",
-    "gui_view",
-    "html_render",
-    "main",
-    "models",
-    "note_parser",
-    "preview_render",
-    "reporting",
-    "rendering",
-    "scan_filters",
-    "scanner",
-    "scanner_engine",
-]
+[tool.setuptools.packages.find]
+include = ["obsidian_to_anki*"]
