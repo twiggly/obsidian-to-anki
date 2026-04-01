@@ -151,9 +151,10 @@ def build_formatting_section(app: object, parent: object) -> object:
     duplicate_label.grid(row=0, column=0, sticky="w")
     duplicate_tooltip = (
         "Choose what to do when multiple Obsidian notes would produce the same card front. "
-        "Stop pauses before export or sync so you can review the duplicates. "
-        "Keep first uses the first matching note and ignores the rest. "
-        "Rename duplicates keeps them all and adds folder labels to make each front unique."
+        "'Stop' pauses before export or sync so you can review the duplicates. "
+        "'Keep first' uses the first matching note and ignores the rest. "
+        "'Rename duplicates' keeps them all and adds folder labels to make each front unique. "
+        "For example, 'Term' becomes 'Term (Lexicon)' and 'Term (Study)'."
     )
     attach_tooltip(duplicate_label, duplicate_tooltip)
     app.duplicate_handling_combobox = ttk.Combobox(
@@ -265,7 +266,7 @@ def build_anki_section(app: object, parent: object) -> object:
 
     app.install_note_type_button = ttk.Button(
         anki_options,
-        text=f"Install {OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME}",
+        text="Install 'Term & Definition' Note Type",
         command=app.install_obsidian_definitions_note_type,
     )
     app.install_note_type_button.grid(row=2, column=2, columnspan=2, sticky="e", pady=(4, 0))
@@ -278,7 +279,7 @@ def build_anki_section(app: object, parent: object) -> object:
 
     app.apply_deck_settings_button = ttk.Button(
         anki_options,
-        text="Use Recommended Deck Settings",
+        text="Apply Recommended Deck Settings",
         command=app.apply_recommended_deck_settings,
     )
     app.apply_deck_settings_button.grid(row=3, column=2, columnspan=2, sticky="e", pady=(4, 0))
