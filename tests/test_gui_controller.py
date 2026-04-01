@@ -10,6 +10,7 @@ from obsidian_to_anki.models import (
     AnkiCatalog,
     AnkiDeckSettingsResult,
     AnkiNoteTypeInstallResult,
+    AnkiPreflightResult,
     AnkiPreflightSummary,
     AnkiFieldCatalog,
     AnkiSyncResult,
@@ -161,6 +162,7 @@ def build_controller() -> ExporterApp:
     app.begin_delivery = mock.Mock()
     app.is_busy = False
     app._anki_catalog_loading = False
+    app._anki_connection_check_loading = False
     app._anki_field_loading = False
     app._last_loaded_anki_url = None
     app._last_loaded_anki_note_type = None
@@ -472,7 +474,7 @@ class GuiControllerTests(unittest.TestCase):
         self.assertEqual(show_preview_dialog.call_args.kwargs["action_label"], "Export")
         callback = show_preview_dialog.call_args.kwargs["on_confirm"]
         callback()
-        app.begin_delivery.assert_called_once_with(options, scan_result)
+        app.begin_delivery.assert_called_once_with(options, scan_result, None)
 
     def test_finish_preview_success_passes_anki_preflight_summary_to_dialog(self) -> None:
         app = build_controller()
@@ -492,14 +494,29 @@ class GuiControllerTests(unittest.TestCase):
             deck_name="Lexicon",
             note_type="Basic",
         )
+        preflight_result = AnkiPreflightResult(
+            summary=preflight_summary,
+            notes=(),
+            can_add=(),
+        )
 
         with (
             mock.patch.object(gui, "messagebox", mock.Mock()),
             mock.patch.object(gui, "show_preview_dialog") as show_preview_dialog,
         ):
-            ExporterApp.finish_preview_success(app, options, scan_result, preflight_summary, None)
+            ExporterApp.finish_preview_success(
+                app,
+                options,
+                scan_result,
+                preflight_summary,
+                None,
+                preflight_result,
+            )
 
         self.assertEqual(show_preview_dialog.call_args.kwargs["anki_preflight_summary"], preflight_summary)
+        callback = show_preview_dialog.call_args.kwargs["on_confirm"]
+        callback()
+        app.begin_delivery.assert_called_once_with(options, scan_result, preflight_result)
 
     def test_finish_preview_success_logs_anki_preflight_error(self) -> None:
         app = build_controller()
@@ -676,11 +693,22 @@ class GuiControllerTests(unittest.TestCase):
     def test_run_anki_connection_refresh_uses_quiet_refresh(self) -> None:
         app = build_controller()
         app.sync_to_anki_var = FakeVar(True)
-        app.refresh_anki_catalog = mock.Mock()
+        app.refresh_anki_connection = mock.Mock()
 
         ExporterApp.run_anki_connection_refresh(app)
 
-        app.refresh_anki_catalog.assert_called_once_with(show_error_dialog=False, quiet=True)
+        app.refresh_anki_connection.assert_called_once_with(show_error_dialog=False, quiet=True)
+
+    def test_run_anki_connection_poll_uses_quiet_connection_check_and_reschedules(self) -> None:
+        app = build_controller()
+        app.sync_to_anki_var = FakeVar(True)
+        app.refresh_anki_connection = mock.Mock()
+        app.start_anki_connection_polling = mock.Mock()
+
+        ExporterApp.run_anki_connection_poll(app)
+
+        app.refresh_anki_connection.assert_called_once_with(show_error_dialog=False, quiet=True)
+        app.start_anki_connection_polling.assert_called_once_with()
 
     def test_start_anki_connection_polling_schedules_periodic_refresh(self) -> None:
         app = build_controller()
@@ -758,6 +786,32 @@ class GuiControllerTests(unittest.TestCase):
 
         with mock.patch.object(gui, "messagebox", mock.Mock()) as messagebox_mock:
             ExporterApp.finish_anki_catalog_refresh_error(app, "Could not reach Anki", quiet=True)
+
+        self.assertEqual(app.status_var.get(), "Existing status")
+        app.log.assert_not_called()
+        self.assertEqual(app.anki_connection_var.get(), "Connection failed")
+        self.assertIsNone(app._last_loaded_anki_url)
+        self.assertIsNone(app._last_loaded_anki_note_type)
+        messagebox_mock.showerror.assert_not_called()
+
+    def test_finish_anki_connection_check_success_triggers_quiet_catalog_refresh_when_catalog_is_stale(self) -> None:
+        app = build_controller()
+        app._last_loaded_anki_url = None
+        app.refresh_anki_catalog = mock.Mock()
+
+        ExporterApp.finish_anki_connection_check_success(app, "http://127.0.0.1:8765", quiet=True)
+
+        self.assertEqual(app.anki_connection_var.get(), "Connected")
+        app.refresh_anki_catalog.assert_called_once_with(show_error_dialog=False, quiet=True)
+
+    def test_finish_anki_connection_check_error_is_quiet_when_requested(self) -> None:
+        app = build_controller()
+        app._last_loaded_anki_url = "http://127.0.0.1:8765"
+        app._last_loaded_anki_note_type = "Basic"
+        app.status_var = FakeVar("Existing status")
+
+        with mock.patch.object(gui, "messagebox", mock.Mock()) as messagebox_mock:
+            ExporterApp.finish_anki_connection_check_error(app, "Could not reach Anki", quiet=True)
 
         self.assertEqual(app.status_var.get(), "Existing status")
         app.log.assert_not_called()

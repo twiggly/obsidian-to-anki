@@ -5,14 +5,15 @@ from typing import Callable, Sequence
 
 from .anki.sync import sync_cards_to_anki
 from .exporting import run_export
-from .models import AnkiSyncResult, DeliveryResult, ExportOptions, NoteCard
+from .models import AnkiPreflightResult, AnkiSyncResult, DeliveryResult, ExportOptions, NoteCard
 
 
 def deliver_cards(
     options: ExportOptions,
     cards: Sequence[NoteCard],
     export_fn: Callable[[ExportOptions, Sequence[NoteCard]], int] = run_export,
-    sync_fn: Callable[[ExportOptions, Sequence[NoteCard]], AnkiSyncResult] = sync_cards_to_anki,
+    sync_fn: Callable[[ExportOptions, Sequence[NoteCard], AnkiPreflightResult | None], AnkiSyncResult] = sync_cards_to_anki,
+    anki_preflight_result: AnkiPreflightResult | None = None,
 ) -> DeliveryResult:
     if not cards:
         return DeliveryResult(output_path=options.output_path)
@@ -29,7 +30,7 @@ def deliver_cards(
     sync_seconds = 0.0
     if options.sync_to_anki:
         sync_started_at = perf_counter()
-        sync_result = sync_fn(options, cards)
+        sync_result = sync_fn(options, cards, anki_preflight_result)
         sync_seconds = perf_counter() - sync_started_at
 
     return DeliveryResult(

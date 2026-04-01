@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Sequence
 
 from .catalog import (
+    check_anki_connection as check_anki_connection_impl,
     fetch_anki_catalog as fetch_anki_catalog_impl,
     fetch_note_type_fields as fetch_note_type_fields_impl,
     validate_anki_target as validate_anki_target_impl,
@@ -34,6 +35,7 @@ from .note_types import (
 from .sync_engine import (
     add_notes_batch as add_notes_batch_impl,
     add_single_note as add_single_note_impl,
+    build_anki_preflight_result as build_anki_preflight_result_impl,
     build_anki_preflight_summary as build_anki_preflight_summary_impl,
     build_anki_notes as build_anki_notes_impl,
     sync_cards_to_anki as sync_cards_to_anki_impl,
@@ -42,6 +44,7 @@ from ..models import (
     AnkiCatalog,
     AnkiDeckSettingsResult,
     AnkiPreflightSummary,
+    AnkiPreflightResult,
     AnkiFieldCatalog,
     AnkiNoteTypeInstallResult,
     AnkiSyncResult,
@@ -59,14 +62,17 @@ __all__ = [
     "AnkiDeckSettingsResult",
     "AnkiFieldCatalog",
     "AnkiNoteTypeInstallResult",
+    "AnkiPreflightResult",
     "AnkiPreflightSummary",
     "AnkiSyncResult",
     "OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME",
     "ExportOptions",
     "NoteCard",
     "build_anki_notes",
+    "build_anki_preflight_result",
     "build_anki_preflight_summary",
     "apply_recommended_deck_settings",
+    "check_anki_connection",
     "fetch_anki_catalog",
     "fetch_note_type_fields",
     "format_anki_error",
@@ -89,6 +95,13 @@ def _invoke_anki_connect_multi(url: str, actions: Sequence[dict[str, object]]) -
 
 def fetch_anki_catalog(anki_connect_url: str) -> AnkiCatalog:
     return fetch_anki_catalog_impl(
+        anki_connect_url,
+        invoke_anki_connect_fn=invoke_anki_connect,
+    )
+
+
+def check_anki_connection(anki_connect_url: str) -> None:
+    check_anki_connection_impl(
         anki_connect_url,
         invoke_anki_connect_fn=invoke_anki_connect,
     )
@@ -157,7 +170,11 @@ def _apply_existing_note_updates(
     )
 
 
-def sync_cards_to_anki(options: ExportOptions, cards: Sequence[NoteCard]) -> AnkiSyncResult:
+def sync_cards_to_anki(
+    options: ExportOptions,
+    cards: Sequence[NoteCard],
+    preflight_result: AnkiPreflightResult | None = None,
+) -> AnkiSyncResult:
     return sync_cards_to_anki_impl(
         options,
         cards,
@@ -172,6 +189,7 @@ def sync_cards_to_anki(options: ExportOptions, cards: Sequence[NoteCard]) -> Ank
         add_single_note_fn=_add_single_note,
         is_duplicate_note_error_fn=is_duplicate_note_error,
         build_existing_note_snapshot_fn=_build_existing_note_snapshot,
+        preflight_result=preflight_result,
     )
 
 
@@ -180,6 +198,21 @@ def build_anki_preflight_summary(
     cards: Sequence[NoteCard],
 ) -> AnkiPreflightSummary:
     return build_anki_preflight_summary_impl(
+        options,
+        cards,
+        validate_anki_target_fn=_validate_anki_target,
+        build_anki_notes_fn=build_anki_notes,
+        fetch_existing_notes_by_front_fn=_fetch_existing_notes_by_front,
+        invoke_anki_connect_fn=invoke_anki_connect,
+        build_existing_note_update_plan_fn=_build_existing_note_update_plan,
+    )
+
+
+def build_anki_preflight_result(
+    options: ExportOptions,
+    cards: Sequence[NoteCard],
+) -> AnkiPreflightResult:
+    return build_anki_preflight_result_impl(
         options,
         cards,
         validate_anki_target_fn=_validate_anki_target,

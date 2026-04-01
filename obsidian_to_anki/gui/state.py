@@ -59,6 +59,7 @@ def apply_default_settings(
     app._last_loaded_anki_note_type = None
     app._pending_anki_catalog_url = None
     app._pending_anki_field_key = None
+    app._anki_connection_check_loading = False
     app.status_var.set(default_status_message)
     app.sync_output_option_state()
     app.sync_html_option_state()

@@ -31,10 +31,13 @@ from .bootstrap import (
     initialize_widget_placeholders,
 )
 from .anki_controller import (
+    finish_anki_connection_check_error as finish_anki_connection_check_error_helper,
+    finish_anki_connection_check_success as finish_anki_connection_check_success_helper,
     finish_anki_catalog_refresh_error as finish_anki_catalog_refresh_error_helper,
     finish_anki_catalog_refresh_success as finish_anki_catalog_refresh_success_helper,
     finish_anki_field_refresh_error as finish_anki_field_refresh_error_helper,
     finish_anki_field_refresh_success as finish_anki_field_refresh_success_helper,
+    refresh_anki_connection as refresh_anki_connection_helper,
     refresh_anki_catalog as refresh_anki_catalog_helper,
     refresh_anki_catalog_if_needed as refresh_anki_catalog_if_needed_helper,
     refresh_anki_fields as refresh_anki_fields_helper,
@@ -87,6 +90,7 @@ from .state import (
     sync_status_details_visibility as sync_status_details_visibility_helper,
 )
 from .tasks import (
+    start_anki_connection_check,
     start_anki_catalog_refresh,
     start_anki_deck_settings_update,
     start_anki_field_catalog_refresh,
@@ -115,6 +119,7 @@ from ..models import (
     AnkiDeckSettingsResult,
     AnkiFieldCatalog,
     AnkiNoteTypeInstallResult,
+    AnkiPreflightResult,
     AnkiPreflightSummary,
     DeliveryResult,
     ExportOptions,
@@ -294,6 +299,20 @@ class ExporterApp:
             quiet=quiet,
         )
 
+    def refresh_anki_connection(
+        self,
+        show_error_dialog: bool = True,
+        quiet: bool = False,
+    ) -> None:
+        refresh_anki_connection_helper(
+            self,
+            normalize_anki_connect_url,
+            start_anki_connection_check,
+            messagebox,
+            show_error_dialog=show_error_dialog,
+            quiet=quiet,
+        )
+
     def refresh_anki_fields(
         self,
         note_type_name: str | None = None,
@@ -381,6 +400,35 @@ class ExporterApp:
         quiet: bool = False,
     ) -> None:
         finish_anki_catalog_refresh_error_helper(
+            self,
+            error_message,
+            details,
+            messagebox,
+            show_error_dialog=show_error_dialog,
+            quiet=quiet,
+        )
+
+    def finish_anki_connection_check_success(
+        self,
+        normalized_url: str,
+        *,
+        quiet: bool = False,
+    ) -> None:
+        finish_anki_connection_check_success_helper(
+            self,
+            normalized_url,
+            quiet=quiet,
+        )
+
+    def finish_anki_connection_check_error(
+        self,
+        error_message: str,
+        details: str | None = None,
+        *,
+        show_error_dialog: bool = True,
+        quiet: bool = False,
+    ) -> None:
+        finish_anki_connection_check_error_helper(
             self,
             error_message,
             details,
@@ -522,7 +570,7 @@ class ExporterApp:
     def run_anki_connection_refresh(self) -> None:
         self._anki_refresh_after_id = None
         if self.sync_to_anki_var.get():
-            self.refresh_anki_catalog(show_error_dialog=False, quiet=True)
+            self.refresh_anki_connection(show_error_dialog=False, quiet=True)
 
     def stop_anki_connection_polling(self) -> None:
         after_id = self._anki_poll_after_id
@@ -547,7 +595,7 @@ class ExporterApp:
         self._anki_poll_after_id = None
         if not self.sync_to_anki_var.get():
             return
-        self.refresh_anki_catalog(show_error_dialog=False, quiet=True)
+        self.refresh_anki_connection(show_error_dialog=False, quiet=True)
         self.start_anki_connection_polling()
 
     def get_folder_filters_from_listbox(self) -> list[str]:
@@ -626,6 +674,7 @@ class ExporterApp:
         scan_result: ScanResult,
         anki_preflight_summary: AnkiPreflightSummary | None = None,
         anki_preflight_error: str | None = None,
+        anki_preflight_result: AnkiPreflightResult | None = None,
     ) -> None:
         finish_preview_success_helper(
             self,
@@ -633,6 +682,7 @@ class ExporterApp:
             scan_result,
             anki_preflight_summary,
             anki_preflight_error,
+            anki_preflight_result,
             preview_no_matches_message=preview_no_matches_message,
             preview_ready_message=preview_ready_message,
             timing_breakdown_lines=timing_breakdown_lines,
@@ -650,11 +700,17 @@ class ExporterApp:
             messagebox_module=messagebox,
         )
 
-    def begin_delivery(self, options: ExportOptions, scan_result: ScanResult) -> None:
+    def begin_delivery(
+        self,
+        options: ExportOptions,
+        scan_result: ScanResult,
+        anki_preflight_result: AnkiPreflightResult | None = None,
+    ) -> None:
         begin_delivery_helper(
             self,
             options,
             scan_result,
+            anki_preflight_result,
             delivery_action_label=delivery_action_label,
             delivery_progress_message=delivery_progress_message,
             format_target_tags=format_target_tags,

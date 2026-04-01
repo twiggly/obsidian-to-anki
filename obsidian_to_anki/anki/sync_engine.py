@@ -5,7 +5,14 @@ from typing import Callable, Sequence
 
 from .connect_client import AnkiConnectError, unexpected_anki_response_message
 from .existing_notes import ExistingAnkiNote, PendingExistingNoteUpdate
-from ..models import AnkiPreflightSummary, AnkiSyncResult, AnkiSyncTiming, ExportOptions, NoteCard
+from ..models import (
+    AnkiPreflightResult,
+    AnkiPreflightSummary,
+    AnkiSyncResult,
+    AnkiSyncTiming,
+    ExportOptions,
+    NoteCard,
+)
 
 
 def build_anki_notes(options: ExportOptions, cards: Sequence[NoteCard]) -> list[dict[str, object]]:
@@ -56,6 +63,83 @@ def add_single_note(
     return note_id
 
 
+def _validate_can_add_results(can_add: object) -> tuple[bool, ...]:
+    if not isinstance(can_add, list) or not all(isinstance(item, bool) for item in can_add):
+        raise AnkiConnectError(unexpected_anki_response_message("canAddNotes"))
+    return tuple(can_add)
+
+
+def _build_anki_preflight_result(
+    options: ExportOptions,
+    cards: Sequence[NoteCard],
+    *,
+    validate_anki_target_fn: Callable[[ExportOptions], None],
+    build_anki_notes_fn: Callable[[ExportOptions, Sequence[NoteCard]], list[dict[str, object]]],
+    fetch_existing_notes_by_front_fn: Callable[[ExportOptions], dict[str, list[ExistingAnkiNote]]],
+    invoke_anki_connect_fn: Callable[[str, str, dict[str, object] | None], object],
+    build_existing_note_update_plan_fn: Callable[
+        [ExportOptions, dict[str, object], dict[str, list[ExistingAnkiNote]]],
+        PendingExistingNoteUpdate | None,
+    ],
+) -> AnkiPreflightResult:
+    if not cards:
+        return AnkiPreflightResult(
+            summary=AnkiPreflightSummary(
+                new_count=0,
+                update_count=0,
+                skip_count=0,
+                deck_name=options.anki_deck,
+                note_type=options.anki_note_type,
+            ),
+            notes=(),
+            can_add=(),
+        )
+
+    validate_anki_target_fn(options)
+    notes = tuple(build_anki_notes_fn(options, cards))
+    existing_notes_by_front: dict[str, list[ExistingAnkiNote]] = {}
+    if options.anki_existing_notes == "update":
+        existing_notes_by_front = fetch_existing_notes_by_front_fn(options)
+
+    can_add = _validate_can_add_results(
+        invoke_anki_connect_fn(options.anki_connect_url, "canAddNotes", {"notes": list(notes)})
+    )
+
+    new_count = 0
+    update_count = 0
+    skip_count = 0
+    for note, allowed in zip(notes, can_add):
+        if allowed:
+            new_count += 1
+            continue
+        if options.anki_existing_notes == "update":
+            update_plan = build_existing_note_update_plan_fn(
+                options,
+                note,
+                existing_notes_by_front,
+            )
+            if update_plan is not None:
+                update_count += 1
+                continue
+        skip_count += 1
+
+    return AnkiPreflightResult(
+        summary=AnkiPreflightSummary(
+            new_count=new_count,
+            update_count=update_count,
+            skip_count=skip_count,
+            deck_name=options.anki_deck,
+            note_type=options.anki_note_type,
+        ),
+        notes=notes,
+        can_add=can_add,
+        existing_notes_by_front={
+            front: tuple(notes_for_front)
+            for front, notes_for_front in existing_notes_by_front.items()
+        },
+    )
+
+
 def sync_cards_to_anki(
     options: ExportOptions,
     cards: Sequence[NoteCard],
@@ -74,6 +158,7 @@ def sync_cards_to_anki(
     add_single_note_fn: Callable[[str, dict[str, object]], int],
     is_duplicate_note_error_fn: Callable[[object], bool],
     build_existing_note_snapshot_fn: Callable[[int, dict[str, object]], ExistingAnkiNote],
+    preflight_result: AnkiPreflightResult | None = None,
 ) -> AnkiSyncResult:
     if not cards:
         return AnkiSyncResult(
@@ -84,21 +169,37 @@ def sync_cards_to_anki(
         )
 
     sync_started_at = perf_counter()
-    validation_started_at = perf_counter()
-    validate_anki_target_fn(options)
-    validation_seconds = perf_counter() - validation_started_at
-    notes = build_anki_notes_fn(options, cards)
+    validation_seconds = 0.0
     existing_lookup_seconds = 0.0
-    existing_notes_by_front: dict[str, list[ExistingAnkiNote]] = {}
-    if options.anki_existing_notes == "update":
-        existing_lookup_started_at = perf_counter()
-        existing_notes_by_front = fetch_existing_notes_by_front_fn(options)
-        existing_lookup_seconds = perf_counter() - existing_lookup_started_at
-    can_add_started_at = perf_counter()
-    can_add = invoke_anki_connect_fn(options.anki_connect_url, "canAddNotes", {"notes": notes})
-    can_add_seconds = perf_counter() - can_add_started_at
-    if not isinstance(can_add, list) or len(can_add) != len(notes):
-        raise AnkiConnectError(unexpected_anki_response_message("canAddNotes"))
+    can_add_seconds = 0.0
+
+    if preflight_result is None:
+        validation_started_at = perf_counter()
+        validate_anki_target_fn(options)
+        validation_seconds = perf_counter() - validation_started_at
+        notes = build_anki_notes_fn(options, cards)
+        existing_notes_by_front: dict[str, list[ExistingAnkiNote]] = {}
+        if options.anki_existing_notes == "update":
+            existing_lookup_started_at = perf_counter()
+            existing_notes_by_front = fetch_existing_notes_by_front_fn(options)
+            existing_lookup_seconds = perf_counter() - existing_lookup_started_at
+        can_add_started_at = perf_counter()
+        can_add = _validate_can_add_results(
+            invoke_anki_connect_fn(options.anki_connect_url, "canAddNotes", {"notes": notes})
+        )
+        can_add_seconds = perf_counter() - can_add_started_at
+    else:
+        notes = list(preflight_result.notes)
+        can_add = preflight_result.can_add
+        existing_notes_by_front = (
+            {
+                front: list(notes_for_front)
+                for front, notes_for_front in preflight_result.existing_notes_by_front.items()
+            }
+            if options.anki_existing_notes == "update"
+            else {}
+        )
+
     added_count = 0
     skipped_count = 0
     updated_count = 0
@@ -207,47 +308,36 @@ def build_anki_preflight_summary(
         PendingExistingNoteUpdate | None,
     ],
 ) -> AnkiPreflightSummary:
-    if not cards:
-        return AnkiPreflightSummary(
-            new_count=0,
-            update_count=0,
-            skip_count=0,
-            deck_name=options.anki_deck,
-            note_type=options.anki_note_type,
-        )
+    return _build_anki_preflight_result(
+        options,
+        cards,
+        validate_anki_target_fn=validate_anki_target_fn,
+        build_anki_notes_fn=build_anki_notes_fn,
+        fetch_existing_notes_by_front_fn=fetch_existing_notes_by_front_fn,
+        invoke_anki_connect_fn=invoke_anki_connect_fn,
+        build_existing_note_update_plan_fn=build_existing_note_update_plan_fn,
+    ).summary
 
-    validate_anki_target_fn(options)
-    notes = build_anki_notes_fn(options, cards)
-    existing_notes_by_front: dict[str, list[ExistingAnkiNote]] = {}
-    if options.anki_existing_notes == "update":
-        existing_notes_by_front = fetch_existing_notes_by_front_fn(options)
 
-    can_add = invoke_anki_connect_fn(options.anki_connect_url, "canAddNotes", {"notes": notes})
-    if not isinstance(can_add, list) or len(can_add) != len(notes):
-        raise AnkiConnectError(unexpected_anki_response_message("canAddNotes"))
-
-    new_count = 0
-    update_count = 0
-    skip_count = 0
-    for note, allowed in zip(notes, can_add):
-        if allowed:
-            new_count += 1
-            continue
-        if options.anki_existing_notes == "update":
-            update_plan = build_existing_note_update_plan_fn(
-                options,
-                note,
-                existing_notes_by_front,
-            )
-            if update_plan is not None:
-                update_count += 1
-                continue
-        skip_count += 1
-
-    return AnkiPreflightSummary(
-        new_count=new_count,
-        update_count=update_count,
-        skip_count=skip_count,
-        deck_name=options.anki_deck,
-        note_type=options.anki_note_type,
+def build_anki_preflight_result(
+    options: ExportOptions,
+    cards: Sequence[NoteCard],
+    *,
+    validate_anki_target_fn: Callable[[ExportOptions], None],
+    build_anki_notes_fn: Callable[[ExportOptions, Sequence[NoteCard]], list[dict[str, object]]],
+    fetch_existing_notes_by_front_fn: Callable[[ExportOptions], dict[str, list[ExistingAnkiNote]]],
+    invoke_anki_connect_fn: Callable[[str, str, dict[str, object] | None], object],
+    build_existing_note_update_plan_fn: Callable[
+        [ExportOptions, dict[str, object], dict[str, list[ExistingAnkiNote]]],
+        PendingExistingNoteUpdate | None,
+    ],
+) -> AnkiPreflightResult:
+    return _build_anki_preflight_result(
+        options,
+        cards,
+        validate_anki_target_fn=validate_anki_target_fn,
+        build_anki_notes_fn=build_anki_notes_fn,
+        fetch_existing_notes_by_front_fn=fetch_existing_notes_by_front_fn,
+        invoke_anki_connect_fn=invoke_anki_connect_fn,
+        build_existing_note_update_plan_fn=build_existing_note_update_plan_fn,
     )

@@ -3,6 +3,7 @@ from pathlib import Path
 
 from obsidian_to_anki.common import unexpected_error_message
 from obsidian_to_anki.gui.tasks import (
+    run_anki_connection_check_callbacks,
     run_anki_catalog_callbacks,
     run_anki_deck_settings_callbacks,
     run_anki_field_catalog_callbacks,
@@ -15,6 +16,7 @@ from obsidian_to_anki.models import (
     AnkiCatalog,
     AnkiDeckSettingsResult,
     AnkiNoteTypeInstallResult,
+    AnkiPreflightResult,
     AnkiPreflightSummary,
     AnkiFieldCatalog,
     DeliveryResult,
@@ -82,6 +84,18 @@ class GuiTaskTests(unittest.TestCase):
         )
 
         self.assertEqual(calls, [("success", expected_catalog, None)])
+
+    def test_run_anki_connection_check_callbacks_routes_success(self) -> None:
+        calls: list[tuple[str, object, object | None]] = []
+
+        run_anki_connection_check_callbacks(
+            "http://127.0.0.1:8765",
+            lambda: calls.append(("success", None, None)),
+            lambda error_message, details=None: calls.append(("error", error_message, details)),
+            check_fn=lambda url: None,
+        )
+
+        self.assertEqual(calls, [("success", None, None)])
 
     def test_run_anki_catalog_callbacks_routes_export_errors(self) -> None:
         calls: list[tuple[str, str, str | None]] = []
@@ -193,19 +207,33 @@ class GuiTaskTests(unittest.TestCase):
             deck_name="Lexicon",
             note_type="Basic",
         )
+        expected_preflight_result = AnkiPreflightResult(
+            summary=expected_preflight,
+            notes=(),
+            can_add=(),
+        )
         calls: list[tuple[str, object, object | None, object | None]] = []
 
         run_preview_scan_callbacks(
             options,
-            lambda completed_options, scan_result, preflight_summary, preflight_error: calls.append(
-                ("success", completed_options, scan_result, preflight_summary or preflight_error)
+            lambda completed_options, scan_result, preflight_summary, preflight_error, preflight_result: calls.append(
+                (
+                    "success",
+                    completed_options,
+                    scan_result,
+                    preflight_summary or preflight_error,
+                    preflight_result,
+                )
             ),
             lambda error_message, details=None: calls.append(("error", error_message, details)),
             scan_fn=lambda received_options, preview_limit: expected_result,
-            preflight_fn=lambda received_options, cards: expected_preflight,
+            preflight_fn=lambda received_options, cards: expected_preflight_result,
         )
 
-        self.assertEqual(calls, [("success", options, expected_result, expected_preflight)])
+        self.assertEqual(
+            calls,
+            [("success", options, expected_result, expected_preflight, expected_preflight_result)],
+        )
 
     def test_run_preview_scan_callbacks_preserves_preview_when_anki_preflight_fails(self) -> None:
         options = ExportOptions(
@@ -218,15 +246,15 @@ class GuiTaskTests(unittest.TestCase):
 
         run_preview_scan_callbacks(
             options,
-            lambda completed_options, scan_result, preflight_summary, preflight_error: calls.append(
-                ("success", completed_options, preflight_summary, preflight_error)
+            lambda completed_options, scan_result, preflight_summary, preflight_error, preflight_result: calls.append(
+                ("success", completed_options, preflight_summary, preflight_error, preflight_result)
             ),
             lambda error_message, details=None: calls.append(("error", error_message, details)),
             scan_fn=lambda received_options, preview_limit: expected_result,
             preflight_fn=lambda received_options, cards: (_ for _ in ()).throw(ExportError("Anki unavailable")),
         )
 
-        self.assertEqual(calls, [("success", options, None, "Anki unavailable")])
+        self.assertEqual(calls, [("success", options, None, "Anki unavailable", None)])
 
     def test_run_preview_scan_callbacks_routes_export_errors(self) -> None:
         options = ExportOptions(vault_path=Path("/tmp/vault"), output_path=Path("/tmp/out.tsv"))
@@ -237,7 +265,9 @@ class GuiTaskTests(unittest.TestCase):
 
         run_preview_scan_callbacks(
             options,
-            lambda completed_options, scan_result: calls.append(("success", str(completed_options), str(scan_result))),
+            lambda completed_options, scan_result, preflight_summary, preflight_error, preflight_result: calls.append(
+                ("success", str(completed_options), str(scan_result), str(preflight_summary), str(preflight_result))
+            ),
             lambda error_message, details=None: calls.append(("error", error_message, details)),
             scan_fn=fail_scan,
         )
@@ -253,7 +283,9 @@ class GuiTaskTests(unittest.TestCase):
 
         run_preview_scan_callbacks(
             options,
-            lambda completed_options, scan_result: calls.append(("success", str(completed_options), str(scan_result))),
+            lambda completed_options, scan_result, preflight_summary, preflight_error, preflight_result: calls.append(
+                ("success", str(completed_options), str(scan_result), str(preflight_summary), str(preflight_result))
+            ),
             lambda error_message, details=None: calls.append(("error", error_message, details)),
             scan_fn=fail_scan,
         )
@@ -277,7 +309,7 @@ class GuiTaskTests(unittest.TestCase):
                 ("success", completed_options, completed_scan_result, delivery_result)
             ),
             lambda error_message, details=None: calls.append(("error", error_message, details, "")),
-            deliver_fn=lambda received_options, cards: expected_result,
+            deliver_fn=lambda received_options, cards, anki_preflight_result=None: expected_result,
         )
 
         self.assertEqual(len(calls), 1)
@@ -294,7 +326,7 @@ class GuiTaskTests(unittest.TestCase):
         scan_result = build_scan_result()
         calls: list[tuple[str, str, str | None]] = []
 
-        def fail_delivery(_: ExportOptions, __: list[NoteCard]) -> DeliveryResult:
+        def fail_delivery(_: ExportOptions, __: list[NoteCard], ___: AnkiPreflightResult | None = None) -> DeliveryResult:
             raise ExportError("Disk full")
 
         run_delivery_callbacks(
@@ -314,7 +346,7 @@ class GuiTaskTests(unittest.TestCase):
         scan_result = build_scan_result()
         calls: list[tuple[str, str, str | None]] = []
 
-        def fail_delivery(_: ExportOptions, __: list[NoteCard]) -> DeliveryResult:
+        def fail_delivery(_: ExportOptions, __: list[NoteCard], ___: AnkiPreflightResult | None = None) -> DeliveryResult:
             raise RuntimeError("write failed")
 
         run_delivery_callbacks(

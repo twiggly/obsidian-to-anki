@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -66,6 +67,14 @@ class AnkiPreflightSummary:
     skip_count: int
     deck_name: str
     note_type: str
+
+
+@dataclass(frozen=True)
+class AnkiPreflightResult:
+    summary: AnkiPreflightSummary
+    notes: tuple[dict[str, Any], ...]
+    can_add: tuple[bool, ...]
+    existing_notes_by_front: dict[str, tuple[object, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

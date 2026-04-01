@@ -59,6 +59,7 @@ def initialize_runtime_state(app: object) -> None:
     app.is_busy = False
     app.status_details_visible = False
     app._anki_catalog_loading = False
+    app._anki_connection_check_loading = False
     app._anki_field_loading = False
     app._last_loaded_anki_url = None
     app._last_loaded_anki_note_type = None
