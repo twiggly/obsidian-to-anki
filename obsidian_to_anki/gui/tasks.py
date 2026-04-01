@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING, Callable
 
 from ..anki.sync import (
     apply_recommended_deck_settings,
-    build_anki_preflight_summary,
+    build_anki_preflight_result,
+    check_anki_connection,
     fetch_anki_catalog,
     fetch_note_type_fields,
     install_obsidian_definitions_note_type,
@@ -18,6 +19,7 @@ from ..models import (
     AnkiCatalog,
     AnkiDeckSettingsResult,
     AnkiNoteTypeInstallResult,
+    AnkiPreflightResult,
     AnkiPreflightSummary,
     AnkiFieldCatalog,
     DeliveryResult,
@@ -34,23 +36,28 @@ if TYPE_CHECKING:
 
 def run_preview_scan_callbacks(
     options: ExportOptions,
-    on_success: Callable[[ExportOptions, ScanResult, AnkiPreflightSummary | None, str | None], None],
+    on_success: Callable[
+        [ExportOptions, ScanResult, AnkiPreflightSummary | None, str | None, AnkiPreflightResult | None],
+        None,
+    ],
     on_error: Callable[[str, str | None], None],
     scan_fn: Callable[[ExportOptions, int], ScanResult] = scan_cards,
-    preflight_fn: Callable[[ExportOptions, list], AnkiPreflightSummary] = build_anki_preflight_summary,
+    preflight_fn: Callable[[ExportOptions, list], AnkiPreflightResult] = build_anki_preflight_result,
 ) -> None:
     try:
         scan_result = scan_fn(options, PREVIEW_CARD_LIMIT)
         preflight_summary: AnkiPreflightSummary | None = None
         preflight_error: str | None = None
+        preflight_result: AnkiPreflightResult | None = None
         if options.sync_to_anki:
             try:
-                preflight_summary = preflight_fn(options, scan_result.cards)
+                preflight_result = preflight_fn(options, scan_result.cards)
+                preflight_summary = preflight_result.summary
             except (ExportError, OSError) as exc:
                 preflight_error = str(exc)
             except Exception:
                 preflight_error = unexpected_error_message("Anki preflight")
-        on_success(options, scan_result, preflight_summary, preflight_error)
+        on_success(options, scan_result, preflight_summary, preflight_error, preflight_result)
     except (ExportError, OSError) as exc:
         on_error(str(exc), None)
     except Exception:
@@ -63,19 +70,23 @@ def run_preview_scan_callbacks(
 def start_preview_scan(
     root: tk.Misc,
     options: ExportOptions,
-    on_success: Callable[[ExportOptions, ScanResult, AnkiPreflightSummary | None, str | None], None],
+    on_success: Callable[
+        [ExportOptions, ScanResult, AnkiPreflightSummary | None, str | None, AnkiPreflightResult | None],
+        None,
+    ],
     on_error: Callable[[str, str | None], None],
 ) -> None:
     def worker() -> None:
         run_preview_scan_callbacks(
             options,
-            lambda completed_options, scan_result, preflight_summary, preflight_error: root.after(
+            lambda completed_options, scan_result, preflight_summary, preflight_error, preflight_result: root.after(
                 0,
                 on_success,
                 completed_options,
                 scan_result,
                 preflight_summary,
                 preflight_error,
+                preflight_result,
             ),
             lambda error_message, details=None: root.after(0, on_error, error_message, details),
         )
@@ -136,6 +147,40 @@ def run_anki_catalog_callbacks(
             unexpected_error_message("Anki refresh"),
             traceback.format_exc(),
         )
+
+
+def run_anki_connection_check_callbacks(
+    anki_connect_url: str,
+    on_success: Callable[[], None],
+    on_error: Callable[[str, str | None], None],
+    check_fn: Callable[[str], None] = check_anki_connection,
+) -> None:
+    try:
+        check_fn(anki_connect_url)
+        on_success()
+    except (ExportError, OSError) as exc:
+        on_error(str(exc), None)
+    except Exception:
+        on_error(
+            unexpected_error_message("Anki connection check"),
+            traceback.format_exc(),
+        )
+
+
+def start_anki_connection_check(
+    root: tk.Misc,
+    anki_connect_url: str,
+    on_success: Callable[[], None],
+    on_error: Callable[[str, str | None], None],
+) -> None:
+    def worker() -> None:
+        run_anki_connection_check_callbacks(
+            anki_connect_url,
+            lambda: root.after(0, on_success),
+            lambda error_message, details=None: root.after(0, on_error, error_message, details),
+        )
+
+    threading.Thread(target=worker, daemon=True).start()
 
 
 def start_anki_catalog_refresh(
@@ -267,10 +312,11 @@ def run_delivery_callbacks(
     scan_result: ScanResult,
     on_success: Callable[[ExportOptions, ScanResult, DeliveryResult], None],
     on_error: Callable[[str, str | None], None],
-    deliver_fn: Callable[[ExportOptions, list], DeliveryResult] = deliver_cards,
+    deliver_fn: Callable[[ExportOptions, list, AnkiPreflightResult | None], DeliveryResult] = deliver_cards,
+    anki_preflight_result: AnkiPreflightResult | None = None,
 ) -> None:
     try:
-        delivery_result = deliver_fn(options, scan_result.cards)
+        delivery_result = deliver_fn(options, scan_result.cards, anki_preflight_result)
         delivery_result = attach_delivery_report(options, scan_result, delivery_result)
         on_success(options, scan_result, delivery_result)
     except (ExportError, OSError) as exc:
@@ -288,6 +334,7 @@ def start_delivery(
     scan_result: ScanResult,
     on_success: Callable[[ExportOptions, ScanResult, DeliveryResult], None],
     on_error: Callable[[str, str | None], None],
+    anki_preflight_result: AnkiPreflightResult | None = None,
 ) -> None:
     def worker() -> None:
         run_delivery_callbacks(
@@ -301,6 +348,7 @@ def start_delivery(
                 delivery_result,
             ),
             lambda error_message, details=None: root.after(0, on_error, error_message, details),
+            anki_preflight_result=anki_preflight_result,
         )
 
     threading.Thread(target=worker, daemon=True).start()

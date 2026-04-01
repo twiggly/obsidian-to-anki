@@ -4,8 +4,13 @@ from unittest import mock
 
 from obsidian_to_anki.anki.connect_client import AnkiConnectError
 from obsidian_to_anki.anki.existing_notes import ExistingAnkiNote, build_existing_note_snapshot, build_existing_note_update_plan
-from obsidian_to_anki.anki.sync_engine import build_anki_notes, build_anki_preflight_summary, sync_cards_to_anki
-from obsidian_to_anki.models import ExportOptions, NoteCard
+from obsidian_to_anki.anki.sync_engine import (
+    build_anki_notes,
+    build_anki_preflight_result,
+    build_anki_preflight_summary,
+    sync_cards_to_anki,
+)
+from obsidian_to_anki.models import AnkiPreflightResult, ExportOptions, NoteCard
 
 
 def build_cards() -> list[NoteCard]:
@@ -79,6 +84,22 @@ class AnkiSyncEngineTests(unittest.TestCase):
         self.assertEqual(summary.new_count, 1)
         self.assertEqual(summary.update_count, 1)
         self.assertEqual(summary.skip_count, 0)
+
+    def test_build_anki_preflight_result_captures_notes_and_can_add_results(self) -> None:
+        result = build_anki_preflight_result(
+            build_options(),
+            build_cards(),
+            validate_anki_target_fn=lambda options: None,
+            build_anki_notes_fn=build_anki_notes,
+            fetch_existing_notes_by_front_fn=lambda options: {},
+            invoke_anki_connect_fn=lambda url, action, params=None: [True, False],
+            build_existing_note_update_plan_fn=build_existing_note_update_plan,
+        )
+
+        self.assertEqual(result.summary.new_count, 1)
+        self.assertEqual(result.summary.skip_count, 1)
+        self.assertEqual(result.can_add, (True, False))
+        self.assertEqual(result.notes[0]["fields"]["Front"], "confab")
 
     def test_sync_cards_to_anki_skips_existing_notes(self) -> None:
         invoke = mock.Mock(return_value=[True, False])
@@ -230,6 +251,66 @@ class AnkiSyncEngineTests(unittest.TestCase):
         applied_updates = apply_updates.call_args.args[1]
         self.assertEqual(applied_updates[0].note_id, 101)
         self.assertEqual(applied_updates[0].front_value, "colloquy")
+
+    def test_sync_cards_to_anki_reuses_preflight_result(self) -> None:
+        options = build_options(existing_notes="update")
+        existing_notes_by_front = {
+            "colloquy": (
+                ExistingAnkiNote(
+                    note_id=101,
+                    fields={"Front": "colloquy", "Back": "old"},
+                    tags=frozenset(),
+                ),
+            )
+        }
+        preflight_result = AnkiPreflightResult(
+            summary=build_anki_preflight_summary(
+                options,
+                build_cards(),
+                validate_anki_target_fn=lambda options: None,
+                build_anki_notes_fn=build_anki_notes,
+                fetch_existing_notes_by_front_fn=lambda options: {
+                    front: list(notes)
+                    for front, notes in existing_notes_by_front.items()
+                },
+                invoke_anki_connect_fn=lambda url, action, params=None: [True, False],
+                build_existing_note_update_plan_fn=build_existing_note_update_plan,
+            ),
+            notes=tuple(build_anki_notes(options, build_cards())),
+            can_add=(True, False),
+            existing_notes_by_front=existing_notes_by_front,
+        )
+
+        validate_target = mock.Mock()
+        fetch_existing_notes = mock.Mock()
+        invoke = mock.Mock()
+        apply_updates = mock.Mock()
+
+        result = sync_cards_to_anki(
+            options,
+            build_cards(),
+            validate_anki_target_fn=validate_target,
+            build_anki_notes_fn=build_anki_notes,
+            fetch_existing_notes_by_front_fn=fetch_existing_notes,
+            invoke_anki_connect_fn=invoke,
+            note_front_value_fn=lambda note, front_field_name: note["fields"][front_field_name],
+            build_existing_note_update_plan_fn=build_existing_note_update_plan,
+            apply_existing_note_updates_fn=apply_updates,
+            add_notes_batch_fn=mock.Mock(return_value=[222]),
+            add_single_note_fn=mock.Mock(),
+            is_duplicate_note_error_fn=lambda error_value: False,
+            build_existing_note_snapshot_fn=build_existing_note_snapshot,
+            preflight_result=preflight_result,
+        )
+
+        self.assertEqual(result.added_count, 1)
+        self.assertEqual(result.updated_count, 1)
+        self.assertEqual(result.timing.validation_seconds, 0.0)
+        self.assertEqual(result.timing.existing_lookup_seconds, 0.0)
+        self.assertEqual(result.timing.can_add_seconds, 0.0)
+        validate_target.assert_not_called()
+        fetch_existing_notes.assert_not_called()
+        invoke.assert_not_called()
 
     def test_sync_cards_to_anki_skips_noop_updates_for_unchanged_notes(self) -> None:
         existing_notes_by_front = {

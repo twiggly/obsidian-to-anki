@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Iterator, Sequence
 
@@ -61,8 +62,11 @@ def is_hidden_vault_entry(path: Path, vault_path: Path) -> bool:
 
 def iter_markdown_note_paths(vault_path: Path) -> Iterator[Path]:
     validate_vault_path(vault_path)
-    for path in sorted(vault_path.rglob("*")):
-        if is_hidden_vault_entry(path, vault_path):
-            continue
-        if path.is_file() and path.suffix.casefold() == ".md":
-            yield path
+    for root, dirnames, filenames in os.walk(vault_path, topdown=True):
+        dirnames[:] = sorted(directory for directory in dirnames if not directory.startswith("."))
+        for filename in sorted(filenames):
+            if filename.startswith("."):
+                continue
+            path = Path(root) / filename
+            if path.suffix.casefold() == ".md":
+                yield path

@@ -11,16 +11,27 @@ from .connect_client import (
 from ..models import AnkiCatalog, AnkiFieldCatalog, ExportOptions
 
 
-def fetch_anki_catalog(
+def check_anki_connection(
     anki_connect_url: str,
     *,
     invoke_anki_connect_fn: Callable[[str, str, dict[str, Any] | None], Any] = invoke_anki_connect,
-) -> AnkiCatalog:
+) -> None:
     version = invoke_anki_connect_fn(anki_connect_url, "version", None)
     if not isinstance(version, int) or version < ANKI_CONNECT_API_VERSION:
         raise AnkiConnectError(
             f"Update the AnkiConnect add-on to version {ANKI_CONNECT_API_VERSION} or newer."
         )
+
+
+def fetch_anki_catalog(
+    anki_connect_url: str,
+    *,
+    invoke_anki_connect_fn: Callable[[str, str, dict[str, Any] | None], Any] = invoke_anki_connect,
+) -> AnkiCatalog:
+    check_anki_connection(
+        anki_connect_url,
+        invoke_anki_connect_fn=invoke_anki_connect_fn,
+    )
 
     deck_names = invoke_anki_connect_fn(anki_connect_url, "deckNames", None)
     note_type_names = invoke_anki_connect_fn(anki_connect_url, "modelNames", None)
@@ -61,11 +72,10 @@ def validate_anki_target(
     invoke_anki_connect_fn: Callable[[str, str, dict[str, Any] | None], Any] = invoke_anki_connect,
     fetch_note_type_fields_fn: Callable[..., AnkiFieldCatalog] = fetch_note_type_fields,
 ) -> None:
-    version = invoke_anki_connect_fn(options.anki_connect_url, "version", None)
-    if not isinstance(version, int) or version < ANKI_CONNECT_API_VERSION:
-        raise AnkiConnectError(
-            f"Update the AnkiConnect add-on to version {ANKI_CONNECT_API_VERSION} or newer."
-        )
+    check_anki_connection(
+        options.anki_connect_url,
+        invoke_anki_connect_fn=invoke_anki_connect_fn,
+    )
 
     deck_names = invoke_anki_connect_fn(options.anki_connect_url, "deckNames", None)
     if options.anki_deck not in deck_names:

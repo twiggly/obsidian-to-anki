@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Callable
 
 from ..anki.sync import OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME
-from ..models import AnkiPreflightSummary, DeliveryResult, ExportOptions, ScanResult
+from ..models import AnkiPreflightResult, AnkiPreflightSummary, DeliveryResult, ExportOptions, ScanResult
 
 
 def set_busy(app: object, busy: bool) -> None:
@@ -100,11 +100,12 @@ def start_preview(
     start_preview_scan(
         app.root,
         preview_options,
-        lambda _completed_options, scan_result, preflight_summary, preflight_error: app.finish_preview_success(
+        lambda _completed_options, scan_result, preflight_summary, preflight_error, preflight_result: app.finish_preview_success(
             options,
             scan_result,
             preflight_summary,
             preflight_error,
+            preflight_result,
         ),
         app.finish_preview_error,
     )
@@ -116,6 +117,7 @@ def finish_preview_success(
     scan_result: ScanResult,
     anki_preflight_summary: AnkiPreflightSummary | None,
     anki_preflight_error: str | None,
+    anki_preflight_result: AnkiPreflightResult | None,
     *,
     preview_no_matches_message: Callable[[str, tuple[str, ...], tuple[str, ...]], str],
     preview_ready_message: Callable[[ScanResult], str],
@@ -166,7 +168,7 @@ def finish_preview_success(
         scan_result,
         anki_preflight_summary=anki_preflight_summary,
         anki_preflight_error=anki_preflight_error,
-        on_confirm=lambda: app.begin_delivery(options, scan_result),
+        on_confirm=lambda: app.begin_delivery(options, scan_result, anki_preflight_result),
         action_label=delivery_action_label(options),
     )
 
@@ -192,6 +194,7 @@ def begin_delivery(
     app: object,
     options: ExportOptions,
     scan_result: ScanResult,
+    anki_preflight_result: AnkiPreflightResult | None,
     *,
     delivery_action_label: Callable[[ExportOptions], str],
     delivery_progress_message: Callable[[ExportOptions], str],
@@ -214,6 +217,7 @@ def begin_delivery(
         scan_result,
         app.finish_delivery_success,
         app.finish_delivery_error,
+        anki_preflight_result,
     )
 
 
