@@ -11,6 +11,25 @@ from ..common import (
     duplicate_handling_from_display,
     format_target_tags,
 )
+from .bootstrap import (
+    ANKI_FOCUS_REFRESH_DELAY_MS,
+    ANKI_POLL_REFRESH_INTERVAL_MS,
+    DEFAULT_ANKI_BACK_FIELD,
+    DEFAULT_ANKI_CONNECT_URL,
+    DEFAULT_ANKI_DECK,
+    DEFAULT_ANKI_EXISTING_NOTES,
+    DEFAULT_ANKI_FRONT_FIELD,
+    DEFAULT_ANKI_NOTE_TYPE,
+    DEFAULT_DUPLICATE_HANDLING,
+    DEFAULT_FLATTEN_NOTE_LINKS,
+    DEFAULT_OUTPUT_PATH,
+    DEFAULT_STATUS_MESSAGE,
+    DEFAULT_TARGET_TAG,
+    configure_root_window,
+    initialize_form_variables,
+    initialize_runtime_state,
+    initialize_widget_placeholders,
+)
 from .anki_controller import (
     finish_anki_catalog_refresh_error as finish_anki_catalog_refresh_error_helper,
     finish_anki_catalog_refresh_success as finish_anki_catalog_refresh_success_helper,
@@ -146,93 +165,13 @@ def get_combobox_values(combobox: object) -> tuple[str, ...]:
     return ()
 
 
-DEFAULT_OUTPUT_PATH = str(Path.home() / "Desktop" / "obsidian-to-anki.tsv")
-DEFAULT_TARGET_TAG = ""
-DEFAULT_ANKI_CONNECT_URL = "http://127.0.0.1:8765"
-DEFAULT_ANKI_DECK = "Default"
-DEFAULT_ANKI_NOTE_TYPE = "Basic"
-DEFAULT_ANKI_FRONT_FIELD = "Front"
-DEFAULT_ANKI_BACK_FIELD = "Back"
-DEFAULT_ANKI_EXISTING_NOTES = "update"
-DEFAULT_DUPLICATE_HANDLING = "error"
-DEFAULT_FLATTEN_NOTE_LINKS = False
-DEFAULT_STATUS_MESSAGE = "Choose a vault folder, then turn on Output TSV or enable direct Anki sync."
-ANKI_FOCUS_REFRESH_DELAY_MS = 750
-ANKI_POLL_REFRESH_INTERVAL_MS = 15000
-
-
 class ExporterApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("Obsidian to Anki")
-        self.root.geometry("800x560")
-        self.root.minsize(600, 560)
-
-        self.vault_var = tk.StringVar()
-        self.output_var = tk.StringVar(value=DEFAULT_OUTPUT_PATH)
-        self.write_tsv_var = tk.BooleanVar(value=False)
-        self.tag_var = tk.StringVar(value=DEFAULT_TARGET_TAG)
-        self.html_var = tk.BooleanVar(value=False)
-        self.skip_empty_var = tk.BooleanVar(value=True)
-        self.quoted_italic_var = tk.BooleanVar(value=False)
-        self.flatten_note_links_var = tk.BooleanVar(value=DEFAULT_FLATTEN_NOTE_LINKS)
-        self.duplicate_handling_var = tk.StringVar(value=DEFAULT_DUPLICATE_HANDLING)
-        self.duplicate_handling_display_var = tk.StringVar(
-            value=duplicate_handling_display_label(DEFAULT_DUPLICATE_HANDLING)
-        )
-        self.sync_to_anki_var = tk.BooleanVar(value=False)
-        self.anki_connect_url_var = tk.StringVar(value=DEFAULT_ANKI_CONNECT_URL)
-        self.anki_deck_var = tk.StringVar(value=DEFAULT_ANKI_DECK)
-        self.anki_note_type_var = tk.StringVar(value=DEFAULT_ANKI_NOTE_TYPE)
-        self.anki_front_field_var = tk.StringVar(value=DEFAULT_ANKI_FRONT_FIELD)
-        self.anki_back_field_var = tk.StringVar(value=DEFAULT_ANKI_BACK_FIELD)
-        self.anki_existing_notes_var = tk.StringVar(value=DEFAULT_ANKI_EXISTING_NOTES)
-        self.anki_connection_var = tk.StringVar(value="Sync off")
-        self.status_var = tk.StringVar(value=DEFAULT_STATUS_MESSAGE)
-        self.status_details_var = tk.StringVar(value="Show Details")
-        self.is_busy = False
-        self.status_details_visible = False
-        self._anki_catalog_loading = False
-        self._anki_field_loading = False
-        self._last_loaded_anki_url: str | None = None
-        self._last_loaded_anki_note_type: str | None = None
-        self._pending_anki_catalog_url: str | None = None
-        self._pending_anki_field_key: tuple[str, str] | None = None
-        self._anki_note_type_install_loading = False
-        self._anki_deck_settings_loading = False
-        self._anki_refresh_after_id: object | None = None
-        self._anki_poll_after_id: object | None = None
-        self.selected_tags: list[str] = []
-        self.folder_filters: list[str] = []
-
-        self.folder_filters_container: tk.Frame
-        self.folder_filter_remove_buttons: list[tk.Label]
-        self.output_tsv_checkbutton: ttk.Checkbutton
-        self.output_entry: ttk.Entry
-        self.output_button: ttk.Button
-        self.html_checkbutton: ttk.Checkbutton
-        self.quoted_italic_checkbutton: ttk.Checkbutton
-        self.flatten_note_links_checkbutton: ttk.Checkbutton
-        self.duplicate_handling_combobox: ttk.Combobox
-        self.tag_combobox: ttk.Combobox
-        self.selected_tags_container: tk.Frame
-        self.selected_tag_remove_buttons: list[tk.Button]
-        self.tag_scan_button: ttk.Button
-        self.add_folder_button: ttk.Button
-        self.sync_to_anki_checkbutton: ttk.Checkbutton
-        self.anki_connection_indicator: ttk.Label
-        self.anki_connect_url_entry: ttk.Entry
-        self.anki_deck_combobox: ttk.Combobox
-        self.anki_note_type_combobox: ttk.Combobox
-        self.anki_front_field_combobox: ttk.Combobox
-        self.anki_back_field_combobox: ttk.Combobox
-        self.anki_existing_notes_combobox: ttk.Combobox
-        self.install_note_type_button: ttk.Button
-        self.apply_deck_settings_button: ttk.Button
-        self.reset_button: ttk.Button
-        self.preview_button: ttk.Button
-        self.status_toggle_button: ttk.Button
-        self.log_widget: tk.Text
+        configure_root_window(self.root)
+        initialize_form_variables(self, tk)
+        initialize_runtime_state(self)
+        initialize_widget_placeholders(self)
 
         self.build_ui()
         self.apply_default_settings()

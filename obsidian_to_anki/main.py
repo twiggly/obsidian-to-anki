@@ -11,7 +11,8 @@ If you run the script without arguments, it opens the UI.
 
 from __future__ import annotations
 
-from .anki_sync import AnkiConnectError, build_anki_notes, invoke_anki_connect, sync_cards_to_anki
+from .anki.sync import AnkiConnectError, build_anki_notes, invoke_anki_connect, sync_cards_to_anki
+from .body_cleanup import clean_body
 from .cli import main, parse_args
 from .common import (
     BOLD_PATTERN,
@@ -53,33 +54,21 @@ from .common import (
 from .delivery import deliver_cards
 from .exporting import run_export, write_tsv_to_handle
 from .gui import ExporterApp, append_folder_filter, launch_gui, remove_folder_filters
-from .models import ExportError, ExportOptions, MaskedText, NoteCard, ScanResult
-from .rendering import (
-    clean_body,
-    html_to_preview_text,
+from .html_render import (
     inline_formatting,
     is_part_of_speech_label,
     markdownish_to_html,
     normalize_part_of_speech_label,
-    populate_preview_text_widget,
-    preview_sections_for_card,
     render_block_segments,
     render_dictionary_entries,
     render_dictionary_entry,
     render_inline_text,
 )
-from .scanner import (
-    build_duplicate_summary,
-    extract_frontmatter_tags,
-    extract_tags,
-    iter_cards,
-    iter_markdown_note_paths,
-    normalize_folder_filters,
-    note_matches_folder_filters,
-    parse_frontmatter_tag_value,
-    scan_cards,
-    split_frontmatter,
-)
+from .models import ExportError, ExportOptions, MaskedText, NoteCard, ScanResult
+from .note_parser import extract_frontmatter_tags, extract_tags, parse_frontmatter_tag_value, split_frontmatter
+from .preview_render import html_to_preview_text, populate_preview_text_widget, preview_sections_for_card
+from .scan_filters import iter_markdown_note_paths, normalize_folder_filters, note_matches_folder_filters
+from .scanner_engine import build_duplicate_summary, iter_cards, scan_cards
 
 __all__ = [
     "AnkiConnectError",

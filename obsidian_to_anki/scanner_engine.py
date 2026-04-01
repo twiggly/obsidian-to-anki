@@ -14,9 +14,10 @@ from .common import (
     effective_target_tags,
     validate_vault_path,
 )
+from .body_cleanup import clean_body
+from .html_render import markdownish_to_html
 from .models import ExportError, ExportOptions, NoteCard, ScanResult
 from .note_parser import extract_tags, split_frontmatter
-from .rendering import clean_body, markdownish_to_html
 from .scan_filters import iter_markdown_note_paths, note_matches_folder_filters
 
 

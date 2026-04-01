@@ -2,10 +2,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from obsidian_to_anki.body_cleanup import clean_body
 from obsidian_to_anki.exporting import run_export
 from obsidian_to_anki.models import ExportError, ExportOptions
-from obsidian_to_anki.rendering import clean_body
-from obsidian_to_anki.scanner import extract_frontmatter_tags, extract_tags, iter_markdown_note_paths, scan_cards, scan_vault_tags
+from obsidian_to_anki.note_parser import extract_frontmatter_tags, extract_tags
+from obsidian_to_anki.scan_filters import iter_markdown_note_paths
+from obsidian_to_anki.scanner_engine import scan_cards, scan_vault_tags
 
 
 class TagExtractionTests(unittest.TestCase):

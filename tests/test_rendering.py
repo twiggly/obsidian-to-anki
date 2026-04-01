@@ -1,8 +1,9 @@
 import unittest
 from pathlib import Path
 
+from obsidian_to_anki.html_render import markdownish_to_html, render_inline_text
 from obsidian_to_anki.models import NoteCard
-from obsidian_to_anki.rendering import markdownish_to_html, preview_sections_for_card, render_inline_text
+from obsidian_to_anki.preview_render import preview_sections_for_card
 
 
 class RenderingTests(unittest.TestCase):
