@@ -39,6 +39,22 @@ def markdownish_to_html(text: str, italicize_quoted_text: bool = False) -> str:
 
     paragraphs: list[str] = []
     block_placeholders = {block_placeholder(index) for index in range(len(code_blocks))}
+    current_dictionary_entry: tuple[str, list[list[str]]] | None = None
+
+    def flush_current_dictionary_entry() -> None:
+        nonlocal current_dictionary_entry
+        if current_dictionary_entry is None:
+            return
+
+        part_of_speech, body_blocks = current_dictionary_entry
+        entry_html = render_dictionary_entry_blocks(
+            part_of_speech,
+            body_blocks,
+            italicize_quoted_text=italicize_quoted_text,
+        )
+        if entry_html is not None:
+            paragraphs.append(entry_html)
+        current_dictionary_entry = None
 
     for block in re.split(r"\n\s*\n", text):
         stripped_block = block.strip()
@@ -46,6 +62,7 @@ def markdownish_to_html(text: str, italicize_quoted_text: bool = False) -> str:
             continue
 
         if stripped_block in block_placeholders:
+            flush_current_dictionary_entry()
             paragraphs.append(stripped_block)
             continue
 
@@ -53,12 +70,35 @@ def markdownish_to_html(text: str, italicize_quoted_text: bool = False) -> str:
         if not lines:
             continue
 
-        dictionary_entries = render_dictionary_entries(lines, italicize_quoted_text=italicize_quoted_text)
-        if dictionary_entries is not None:
-            paragraphs.extend(dictionary_entries)
+        if is_part_of_speech_label(lines[0]):
+            flush_current_dictionary_entry()
+            entry_ranges = dictionary_entry_ranges(lines)
+            if entry_ranges is None:
+                continue
+
+            for start, end in entry_ranges[:-1]:
+                entry_html = render_dictionary_entry(
+                    lines[start:end],
+                    italicize_quoted_text=italicize_quoted_text,
+                )
+                if entry_html is not None:
+                    paragraphs.append(entry_html)
+
+            last_start, last_end = entry_ranges[-1]
+            last_entry_lines = lines[last_start:last_end]
+            current_dictionary_entry = (
+                last_entry_lines[0].strip(),
+                [list(last_entry_lines[1:])],
+            )
+            continue
+
+        if current_dictionary_entry is not None:
+            current_dictionary_entry[1].append(lines)
             continue
 
         paragraphs.extend(render_block_segments(lines, italicize_quoted_text=italicize_quoted_text))
+
+    flush_current_dictionary_entry()
 
     output = "\n".join(paragraphs)
     for index, code_html in enumerate(code_blocks):
@@ -116,7 +156,7 @@ def render_block_segments(
     return segment_parts
 
 
-def render_dictionary_entries(lines: Sequence[str], italicize_quoted_text: bool = False) -> list[str] | None:
+def dictionary_entry_ranges(lines: Sequence[str]) -> list[tuple[int, int]] | None:
     if not lines or not is_part_of_speech_label(lines[0]):
         return None
 
@@ -131,9 +171,16 @@ def render_dictionary_entries(lines: Sequence[str], italicize_quoted_text: bool 
         entry_boundaries.append(index)
 
     entry_boundaries.append(len(lines))
+    return list(zip(entry_boundaries, entry_boundaries[1:]))
+
+
+def render_dictionary_entries(lines: Sequence[str], italicize_quoted_text: bool = False) -> list[str] | None:
+    entry_ranges = dictionary_entry_ranges(lines)
+    if entry_ranges is None:
+        return None
 
     entries: list[str] = []
-    for start, end in zip(entry_boundaries, entry_boundaries[1:]):
+    for start, end in entry_ranges:
         entry_html = render_dictionary_entry(lines[start:end], italicize_quoted_text=italicize_quoted_text)
         if entry_html is None:
             return None
@@ -147,20 +194,37 @@ def render_dictionary_entry(lines: Sequence[str], italicize_quoted_text: bool = 
         return None
 
     part_of_speech = lines[0].strip()
+    return render_dictionary_entry_blocks(
+        part_of_speech,
+        [list(lines[1:])],
+        italicize_quoted_text=italicize_quoted_text,
+    )
+
+
+def render_dictionary_entry_blocks(
+    part_of_speech: str,
+    body_blocks: Sequence[Sequence[str]],
+    italicize_quoted_text: bool = False,
+) -> str | None:
     if not is_part_of_speech_label(part_of_speech):
         return None
 
-    body_segments = render_block_segments(
-        lines[1:],
-        italicize_quoted_text=italicize_quoted_text,
-        text_class="gloss",
-    )
-    if not body_segments:
+    entry_parts: list[str] = []
+    for block_lines in body_blocks:
+        body_segments = render_block_segments(
+            block_lines,
+            italicize_quoted_text=italicize_quoted_text,
+            text_class="gloss",
+        )
+        if not body_segments:
+            continue
+        entry_parts.extend(body_segments)
+
+    if not entry_parts:
         return None
 
     pos_html = render_inline_text(part_of_speech, italicize_quoted_text=italicize_quoted_text)
-    entry_parts = [f'<div class="pos">{pos_html}</div>', *body_segments]
-    return f'<div class="dictionary-entry">{"".join(entry_parts)}</div>'
+    return f'<div class="dictionary-entry"><div class="pos">{pos_html}</div>{"".join(entry_parts)}</div>'
 
 
 def is_part_of_speech_label(label: str) -> bool:

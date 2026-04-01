@@ -62,6 +62,28 @@ class RenderingTests(unittest.TestCase):
         self.assertIn('<div class="gloss">second gloss</div>', rendered)
         self.assertNotIn('<div class="gloss">verb<br>second gloss</div>', rendered)
 
+    def test_markdownish_to_html_keeps_blank_line_senses_inside_single_dictionary_entry(self) -> None:
+        rendered = markdownish_to_html(
+            "noun\n"
+            "lack of good sense; foolishness\n"
+            "- a foolish act, idea, or practice\n\n"
+            "a costly ornamental building with no practical purpose\n\n"
+            "a theatrical revue with glamorous female performers"
+        )
+
+        self.assertEqual(rendered.count('class="dictionary-entry"'), 1)
+        self.assertIn('<div class="pos">noun</div>', rendered)
+        self.assertIn('<div class="gloss">lack of good sense; foolishness</div>', rendered)
+        self.assertIn("<ul><li>a foolish act, idea, or practice</li></ul>", rendered)
+        self.assertIn(
+            '<div class="gloss">a costly ornamental building with no practical purpose</div>',
+            rendered,
+        )
+        self.assertIn(
+            '<div class="gloss">a theatrical revue with glamorous female performers</div>',
+            rendered,
+        )
+
     def test_preview_sections_keep_plain_text_angle_brackets(self) -> None:
         card = NoteCard(
             front="Example",
