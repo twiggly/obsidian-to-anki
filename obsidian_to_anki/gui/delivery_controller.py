@@ -12,11 +12,25 @@ def set_busy(app: object, busy: bool) -> None:
         app.reset_button.state(["disabled"])
         app.tag_scan_button.state(["disabled"])
         app.add_folder_button.state(["disabled"])
+        if hasattr(app, "install_note_type_button"):
+            app.install_note_type_button.state(["disabled"])
+        if hasattr(app, "apply_deck_settings_button"):
+            app.apply_deck_settings_button.state(["disabled"])
     else:
         app.preview_button.state(["!disabled"])
         app.reset_button.state(["!disabled"])
         app.tag_scan_button.state(["!disabled"])
         app.add_folder_button.state(["!disabled"])
+        if hasattr(app, "install_note_type_button"):
+            if app.sync_to_anki_var.get():
+                app.install_note_type_button.state(["!disabled"])
+            else:
+                app.install_note_type_button.state(["disabled"])
+        if hasattr(app, "apply_deck_settings_button"):
+            if app.sync_to_anki_var.get():
+                app.apply_deck_settings_button.state(["!disabled"])
+            else:
+                app.apply_deck_settings_button.state(["disabled"])
     app.set_selected_tags_in_listbox(app.get_selected_tags_from_listbox())
     app.set_folder_filters_in_listbox(app.get_folder_filters_from_listbox())
 

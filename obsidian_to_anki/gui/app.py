@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Sequence
 
-from ..anki.sync import normalize_anki_connect_url
+from ..anki.sync import OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME, normalize_anki_connect_url
 from ..common import (
     duplicate_handling_display_label,
     duplicate_handling_from_display,
@@ -45,6 +45,7 @@ from .logic import (
     export_no_cards_message,
     preview_no_matches_message,
     preview_ready_message,
+    recommended_deck_settings_confirmation_message,
     timing_breakdown_lines,
 )
 from .preview import show_preview_dialog
@@ -68,7 +69,9 @@ from .state import (
 )
 from .tasks import (
     start_anki_catalog_refresh,
+    start_anki_deck_settings_update,
     start_anki_field_catalog_refresh,
+    start_anki_note_type_install,
     start_delivery,
     start_preview_scan,
     start_tag_catalog_scan,
@@ -88,7 +91,16 @@ from .view import (
     sync_output_option_state,
 )
 from .widgets import render_tag_chips
-from ..models import AnkiCatalog, AnkiFieldCatalog, AnkiPreflightSummary, DeliveryResult, ExportOptions, ScanResult
+from ..models import (
+    AnkiCatalog,
+    AnkiDeckSettingsResult,
+    AnkiFieldCatalog,
+    AnkiNoteTypeInstallResult,
+    AnkiPreflightSummary,
+    DeliveryResult,
+    ExportOptions,
+    ScanResult,
+)
 
 if TYPE_CHECKING:
     import tkinter as tk
@@ -104,9 +116,34 @@ else:
         ttk = None
 
 
+def recommended_deck_settings_preset_name(deck_name: str) -> str:
+    return f"{OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME} - {deck_name}"
+
+
 def remove_folder_filters(existing_filters: Sequence[str], selected_indexes: Sequence[int]) -> list[str]:
     selected = {index for index in selected_indexes if 0 <= index < len(existing_filters)}
     return [value for index, value in enumerate(existing_filters) if index not in selected]
+
+
+def get_combobox_values(combobox: object) -> tuple[str, ...]:
+    try:
+        values = combobox.cget("values")
+    except Exception:
+        values = getattr(combobox, "values", ())
+
+    if isinstance(values, tuple):
+        return values
+    if isinstance(values, list):
+        return tuple(values)
+    if isinstance(values, str):
+        tk_obj = getattr(combobox, "tk", None)
+        if tk_obj is not None and hasattr(tk_obj, "splitlist"):
+            try:
+                return tuple(tk_obj.splitlist(values))
+            except Exception:
+                pass
+        return (values,) if values else ()
+    return ()
 
 
 DEFAULT_OUTPUT_PATH = str(Path.home() / "Desktop" / "obsidian-to-anki.tsv")
@@ -159,6 +196,8 @@ class ExporterApp:
         self._last_loaded_anki_note_type: str | None = None
         self._pending_anki_catalog_url: str | None = None
         self._pending_anki_field_key: tuple[str, str] | None = None
+        self._anki_note_type_install_loading = False
+        self._anki_deck_settings_loading = False
         self._anki_refresh_after_id: object | None = None
         self._anki_poll_after_id: object | None = None
         self.selected_tags: list[str] = []
@@ -185,6 +224,8 @@ class ExporterApp:
         self.anki_front_field_combobox: ttk.Combobox
         self.anki_back_field_combobox: ttk.Combobox
         self.anki_existing_notes_combobox: ttk.Combobox
+        self.install_note_type_button: ttk.Button
+        self.apply_deck_settings_button: ttk.Button
         self.reset_button: ttk.Button
         self.preview_button: ttk.Button
         self.status_toggle_button: ttk.Button
@@ -324,6 +365,62 @@ class ExporterApp:
             show_error_dialog=show_error_dialog,
         )
 
+    def install_obsidian_definitions_note_type(self) -> None:
+        if (
+            self.is_busy
+            or self._anki_catalog_loading
+            or self._anki_field_loading
+            or self._anki_note_type_install_loading
+        ):
+            return
+
+        self._anki_note_type_install_loading = True
+        self.set_busy(True)
+        self.status_var.set(f"Installing the {OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME} note type…")
+        self.log(f"Installing or updating the {OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME} note type in Anki.")
+        start_anki_note_type_install(
+            self.root,
+            self.anki_connect_url_var.get(),
+            self.finish_anki_note_type_install_success,
+            self.finish_anki_note_type_install_error,
+        )
+
+    def apply_recommended_deck_settings(self) -> None:
+        if (
+            self.is_busy
+            or self._anki_catalog_loading
+            or self._anki_field_loading
+            or self._anki_note_type_install_loading
+            or self._anki_deck_settings_loading
+        ):
+            return
+
+        deck_name = self.anki_deck_var.get().strip()
+        if not deck_name:
+            messagebox.showerror(
+                "Deck settings update failed",
+                "Choose an Anki deck before applying the recommended deck settings.",
+            )
+            return
+        preset_name = recommended_deck_settings_preset_name(deck_name)
+        if not messagebox.askyesno(
+            "Apply recommended deck settings",
+            recommended_deck_settings_confirmation_message(deck_name, preset_name),
+        ):
+            return
+
+        self._anki_deck_settings_loading = True
+        self.set_busy(True)
+        self.status_var.set(f"Applying the recommended deck settings to '{deck_name}'…")
+        self.log(f"Applying the recommended deck settings to '{deck_name}' in Anki.")
+        start_anki_deck_settings_update(
+            self.root,
+            self.anki_connect_url_var.get(),
+            deck_name,
+            self.finish_anki_deck_settings_success,
+            self.finish_anki_deck_settings_error,
+        )
+
     def finish_anki_catalog_refresh_success(
         self,
         catalog: AnkiCatalog,
@@ -366,6 +463,89 @@ class ExporterApp:
             messagebox,
             show_error_dialog=show_error_dialog,
         )
+
+    def finish_anki_note_type_install_success(self, result: AnkiNoteTypeInstallResult) -> None:
+        self._anki_note_type_install_loading = False
+        self.set_busy(False)
+        self.set_anki_connection_status("connected")
+
+        message = (
+            f"Installed the Anki note type '{result.note_type_name}' with forward and reverse definition cards."
+            if result.created
+            else f"Updated the Anki note type '{result.note_type_name}' with the latest templates and styling."
+        )
+        self.status_var.set(message)
+        self.log(message)
+
+        note_type_choices = sorted(
+            set((*get_combobox_values(self.anki_note_type_combobox), result.note_type_name)),
+            key=str.casefold,
+        )
+        resolved_note_type = set_combobox_choices(
+            self.anki_note_type_combobox,
+            note_type_choices,
+            result.note_type_name,
+        )
+        self.anki_note_type_var.set(resolved_note_type)
+        front_value, back_value = set_anki_field_choices(
+            self.anki_front_field_combobox,
+            self.anki_back_field_combobox,
+            (DEFAULT_ANKI_FRONT_FIELD, DEFAULT_ANKI_BACK_FIELD),
+            DEFAULT_ANKI_FRONT_FIELD,
+            DEFAULT_ANKI_BACK_FIELD,
+        )
+        self.anki_front_field_var.set(front_value)
+        self.anki_back_field_var.set(back_value)
+        try:
+            self._last_loaded_anki_url = normalize_anki_connect_url(self.anki_connect_url_var.get())
+        except Exception:
+            self._last_loaded_anki_url = None
+        self._last_loaded_anki_note_type = resolved_note_type
+        messagebox.showinfo("Note type ready", message)
+
+    def finish_anki_note_type_install_error(
+        self,
+        error_message: str,
+        details: str | None = None,
+    ) -> None:
+        self._anki_note_type_install_loading = False
+        self.set_busy(False)
+        self.status_var.set(error_message)
+        if details is None:
+            self.log(f"Error: {error_message}")
+        else:
+            self.log(error_message)
+            self.log(details.rstrip())
+        messagebox.showerror("Note type install failed", error_message)
+
+    def finish_anki_deck_settings_success(self, result: AnkiDeckSettingsResult) -> None:
+        self._anki_deck_settings_loading = False
+        self.set_busy(False)
+        self.set_anki_connection_status("connected")
+
+        message = (
+            f"Applied the recommended deck settings to '{result.deck_name}' using the preset '{result.preset_name}'."
+            if result.created
+            else f"Updated the recommended deck settings preset '{result.preset_name}' for '{result.deck_name}'."
+        )
+        self.status_var.set(message)
+        self.log(message)
+        messagebox.showinfo("Deck settings ready", message)
+
+    def finish_anki_deck_settings_error(
+        self,
+        error_message: str,
+        details: str | None = None,
+    ) -> None:
+        self._anki_deck_settings_loading = False
+        self.set_busy(False)
+        self.status_var.set(error_message)
+        if details is None:
+            self.log(f"Error: {error_message}")
+        else:
+            self.log(error_message)
+            self.log(details.rstrip())
+        messagebox.showerror("Deck settings update failed", error_message)
 
     def on_anki_connect_url_change(self, _: object | None = None) -> None:
         self.refresh_anki_catalog_if_needed()

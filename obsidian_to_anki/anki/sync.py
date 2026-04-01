@@ -17,6 +17,7 @@ from .connect_client import (
     request,
     unexpected_anki_response_message,
 )
+from .deck_settings import apply_recommended_deck_settings as apply_recommended_deck_settings_impl
 from .existing_notes import (
     ExistingAnkiNote,
     PendingExistingNoteUpdate,
@@ -25,6 +26,10 @@ from .existing_notes import (
     build_existing_note_update_plan as build_existing_note_update_plan_impl,
     fetch_existing_notes_by_front as fetch_existing_notes_by_front_impl,
     note_front_value as note_front_value_impl,
+)
+from .note_types import (
+    OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME,
+    install_obsidian_definitions_note_type as install_obsidian_definitions_note_type_impl,
 )
 from .sync_engine import (
     add_notes_batch as add_notes_batch_impl,
@@ -35,8 +40,10 @@ from .sync_engine import (
 )
 from ..models import (
     AnkiCatalog,
+    AnkiDeckSettingsResult,
     AnkiPreflightSummary,
     AnkiFieldCatalog,
+    AnkiNoteTypeInstallResult,
     AnkiSyncResult,
     ExportOptions,
     NoteCard,
@@ -49,16 +56,21 @@ __all__ = [
     "ANKI_CONNECT_API_VERSION",
     "AnkiCatalog",
     "AnkiConnectError",
+    "AnkiDeckSettingsResult",
     "AnkiFieldCatalog",
+    "AnkiNoteTypeInstallResult",
     "AnkiPreflightSummary",
     "AnkiSyncResult",
+    "OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME",
     "ExportOptions",
     "NoteCard",
     "build_anki_notes",
     "build_anki_preflight_summary",
+    "apply_recommended_deck_settings",
     "fetch_anki_catalog",
     "fetch_note_type_fields",
     "format_anki_error",
+    "install_obsidian_definitions_note_type",
     "invoke_anki_connect",
     "normalize_anki_connect_url",
     "sync_cards_to_anki",
@@ -175,4 +187,22 @@ def build_anki_preflight_summary(
         fetch_existing_notes_by_front_fn=_fetch_existing_notes_by_front,
         invoke_anki_connect_fn=invoke_anki_connect,
         build_existing_note_update_plan_fn=_build_existing_note_update_plan,
+    )
+
+
+def install_obsidian_definitions_note_type(anki_connect_url: str) -> AnkiNoteTypeInstallResult:
+    return install_obsidian_definitions_note_type_impl(
+        anki_connect_url,
+        invoke_anki_connect_fn=invoke_anki_connect,
+    )
+
+
+def apply_recommended_deck_settings(
+    anki_connect_url: str,
+    deck_name: str,
+) -> AnkiDeckSettingsResult:
+    return apply_recommended_deck_settings_impl(
+        anki_connect_url,
+        deck_name,
+        invoke_anki_connect_fn=invoke_anki_connect,
     )

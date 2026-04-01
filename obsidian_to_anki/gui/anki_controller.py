@@ -29,6 +29,8 @@ def sync_anki_option_state(
             app.anki_front_field_combobox,
             app.anki_back_field_combobox,
             app.anki_existing_notes_combobox,
+            app.install_note_type_button,
+            app.apply_deck_settings_button,
         ],
     )
     if sync_enabled:

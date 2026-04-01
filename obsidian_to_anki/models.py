@@ -92,6 +92,19 @@ class AnkiFieldCatalog:
 
 
 @dataclass(frozen=True)
+class AnkiNoteTypeInstallResult:
+    note_type_name: str
+    created: bool
+
+
+@dataclass(frozen=True)
+class AnkiDeckSettingsResult:
+    deck_name: str
+    preset_name: str
+    created: bool
+
+
+@dataclass(frozen=True)
 class DeliveryResult:
     export_count: int = 0
     output_path: Path | None = None

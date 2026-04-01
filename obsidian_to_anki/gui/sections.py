@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ..anki.sync import OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME
 from ..common import ANKI_EXISTING_NOTE_CHOICES, DUPLICATE_HANDLING_DISPLAY_CHOICES
 from .widgets import attach_tooltip, chip_tray_frame_kwargs
 
@@ -261,6 +262,31 @@ def build_anki_section(app: object, parent: object) -> object:
         width=10,
     )
     app.anki_existing_notes_combobox.grid(row=2, column=1, sticky="w", padx=(10, 10), pady=(4, 0))
+
+    app.install_note_type_button = ttk.Button(
+        anki_options,
+        text=f"Install {OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME}",
+        command=app.install_obsidian_definitions_note_type,
+    )
+    app.install_note_type_button.grid(row=2, column=2, columnspan=2, sticky="e", pady=(4, 0))
+    attach_tooltip(
+        app.install_note_type_button,
+        f"Install or update the bundled '{OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME}' note type in Anki. "
+        "It uses the standard Front and Back fields, includes your custom styling, "
+        "and creates both forward and reverse definition cards.",
+    )
+
+    app.apply_deck_settings_button = ttk.Button(
+        anki_options,
+        text="Use Recommended Deck Settings",
+        command=app.apply_recommended_deck_settings,
+    )
+    app.apply_deck_settings_button.grid(row=3, column=2, columnspan=2, sticky="e", pady=(4, 0))
+    attach_tooltip(
+        app.apply_deck_settings_button,
+        "Create or update a dedicated Anki deck preset for the selected deck. "
+        "It applies the recommended learning steps, daily limits, and sibling burying settings for these cards.",
+    )
 
     app.anki_connect_url_entry = ttk.Entry(anki_options, textvariable=app.anki_connect_url_var)
     app.anki_connect_url_entry.bind("<FocusOut>", app.on_anki_connect_url_change)

@@ -206,6 +206,23 @@ def timing_breakdown_lines(
     return lines
 
 
+def recommended_deck_settings_confirmation_message(deck_name: str, preset_name: str) -> str:
+    return (
+        f"Apply the recommended deck settings to '{deck_name}'?\n\n"
+        f"This will create or update the preset '{preset_name}' and assign it to that deck.\n\n"
+        "It will set:\n"
+        "• learning steps: 1m 10m\n"
+        "• relearning step: 10m\n"
+        "• new cards/day: 10\n"
+        "• max reviews/day: 200\n"
+        "• new gather order: Random notes\n"
+        "• new sort order: Card type, then random\n"
+        "• review sort order: Due date, then random\n"
+        "• bury new siblings: on\n"
+        "• bury review siblings: on"
+    )
+
+
 def duplicate_front_warning_message(
     duplicate_fronts: dict[str, tuple[Path, ...]],
     duplicate_handling: str,
