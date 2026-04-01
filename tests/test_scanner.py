@@ -74,6 +74,17 @@ class TagExtractionTests(unittest.TestCase):
 
         self.assertEqual(cleaned, "Use `[[Logic#Fallacies]]` here")
 
+    def test_clean_body_preserves_note_links_when_flattening_is_disabled(self) -> None:
+        cleaned = clean_body(
+            "[[Logic#Fallacies|common fallacies]]\n[term](Logic.md)\n![[Other Note]]",
+            flatten_note_links=False,
+        )
+
+        self.assertEqual(
+            cleaned,
+            "[[Logic#Fallacies|common fallacies]]\n[term](Logic.md)\n![[Other Note]]",
+        )
+
 
 class ValidationTests(unittest.TestCase):
     def test_scan_vault_tags_collects_and_sorts_tags(self) -> None:
@@ -145,6 +156,36 @@ class ValidationTests(unittest.TestCase):
 
             self.assertEqual(result.total_matches, 1)
             self.assertEqual(result.preview_cards[0].front, "Definition")
+
+    def test_scan_cards_preserves_note_links_when_option_is_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            vault_path = Path(temp_dir)
+            (vault_path / "Definition.md").write_text(
+                "#definition\nSee [[Logic#Fallacies|common fallacies]].",
+                encoding="utf-8",
+            )
+            options = ExportOptions(
+                vault_path=vault_path,
+                output_path=vault_path / "out.tsv",
+                flatten_note_links=False,
+            )
+
+            result = scan_cards(options, preview_limit=10)
+
+            self.assertEqual(
+                result.preview_cards[0].back,
+                "See [[Logic#Fallacies|common fallacies]].",
+            )
+
+    def test_scan_cards_always_skips_empty_cleaned_bodies(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            vault_path = Path(temp_dir)
+            (vault_path / "Empty.md").write_text("#definition", encoding="utf-8")
+            options = ExportOptions(vault_path=vault_path, output_path=vault_path / "out.tsv")
+
+            result = scan_cards(options, preview_limit=10)
+
+            self.assertEqual(result.total_matches, 0)
 
     def test_iter_markdown_note_paths_is_case_insensitive(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

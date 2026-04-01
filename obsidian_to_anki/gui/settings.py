@@ -15,6 +15,7 @@ GUI_SETTINGS_KEYS = {
     "html_output": bool,
     "skip_empty": bool,
     "italicize_quoted_text": bool,
+    "flatten_note_links": bool,
     "duplicate_handling": str,
     "include_folders": list,
     "sync_to_anki": bool,

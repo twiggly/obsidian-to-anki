@@ -118,6 +118,7 @@ def build_controller() -> ExporterApp:
     app.html_var = FakeVar(False)
     app.skip_empty_var = FakeVar(False)
     app.quoted_italic_var = FakeVar(False)
+    app.flatten_note_links_var = FakeVar(True)
     app.duplicate_handling_var = FakeVar("error")
     app.duplicate_handling_display_var = FakeVar("Stop")
     app.sync_to_anki_var = FakeVar(False)
@@ -269,6 +270,16 @@ class GuiControllerTests(unittest.TestCase):
             ExporterApp.build_options_from_form(app)
 
         self.assertEqual(builder.call_args.kwargs["write_tsv"], False)
+        self.assertEqual(builder.call_args.kwargs["flatten_note_links"], True)
+
+    def test_build_options_from_form_passes_flatten_note_links_toggle(self) -> None:
+        app = build_controller()
+        app.flatten_note_links_var = FakeVar(False)
+
+        with mock.patch.object(gui, "build_export_options_from_values", return_value=mock.Mock()) as builder:
+            ExporterApp.build_options_from_form(app)
+
+        self.assertEqual(builder.call_args.kwargs["flatten_note_links"], False)
 
     def test_sync_status_details_visibility_hides_log_by_default(self) -> None:
         app = build_controller()

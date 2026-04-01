@@ -18,6 +18,7 @@ class GuiSettingsTests(unittest.TestCase):
                 "html_output": True,
                 "skip_empty": True,
                 "italicize_quoted_text": False,
+                "flatten_note_links": False,
                 "duplicate_handling": "suffix",
                 "include_folders": ["Lexicon"],
                 "sync_to_anki": True,

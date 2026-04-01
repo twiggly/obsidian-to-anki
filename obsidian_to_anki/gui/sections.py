@@ -134,16 +134,16 @@ def build_formatting_section(app: object, parent: object) -> object:
         "When HTML is enabled, text inside double quotes will be italicized automatically. "
         "This is helpful for examples or quoted usage, but it has no effect when HTML is off.",
     )
-    skip_empty_checkbutton = ttk.Checkbutton(
+    app.flatten_note_links_checkbutton = ttk.Checkbutton(
         formatting,
-        text="Skip empty notes",
-        variable=app.skip_empty_var,
+        text="Flatten note links",
+        variable=app.flatten_note_links_var,
     )
-    skip_empty_checkbutton.grid(row=1, column=0, sticky="w", pady=(4, 0))
+    app.flatten_note_links_checkbutton.grid(row=1, column=0, sticky="w", pady=(4, 0))
     attach_tooltip(
-        skip_empty_checkbutton,
-        "Skip notes whose cleaned definition is empty after tags and formatting markers are removed. "
-        "This helps avoid blank or nearly blank cards.",
+        app.flatten_note_links_checkbutton,
+        "Replace Obsidian and Markdown note links with readable text on the card back. "
+        "For example, [[gaudy]] becomes gaudy, aliases are preserved, and note embeds are removed.",
     )
     duplicate_frame = ttk.Frame(formatting)
     duplicate_frame.grid(row=1, column=1, sticky="w", pady=(4, 0))

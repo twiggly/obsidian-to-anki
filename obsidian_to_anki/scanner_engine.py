@@ -31,8 +31,8 @@ def scan_cards(options: ExportOptions, preview_limit: int = PREVIEW_CARD_LIMIT) 
                 options.additional_target_tags,
             ),
             html_output=options.html_output,
-            skip_empty=options.skip_empty,
             italicize_quoted_text=options.italicize_quoted_text,
+            flatten_note_links=options.flatten_note_links,
             include_folders=options.include_folders,
         )
     )
@@ -206,8 +206,8 @@ def iter_cards(
     vault_path: Path,
     target_tags: tuple[str, ...],
     html_output: bool,
-    skip_empty: bool,
     italicize_quoted_text: bool,
+    flatten_note_links: bool,
     include_folders: tuple[str, ...],
 ) -> Iterator[NoteCard]:
     for path in iter_markdown_note_paths(vault_path):
@@ -230,9 +230,9 @@ def iter_cards(
             continue
 
         front = path.stem.strip()
-        back = clean_body(body)
+        back = clean_body(body, flatten_note_links=flatten_note_links)
 
-        if skip_empty and not back.strip():
+        if not back.strip():
             continue
 
         if html_output:

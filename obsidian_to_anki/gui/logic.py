@@ -63,6 +63,7 @@ def build_export_options_from_values(
     anki_back_field: str,
     anki_existing_notes: str = "skip",
     write_tsv: bool = True,
+    flatten_note_links: bool = True,
 ) -> ExportOptions:
     vault_value = vault.strip()
     output_value = output.strip()
@@ -132,11 +133,12 @@ def build_export_options_from_values(
         target_tag=target_tags[0],
         additional_target_tags=target_tags[1:],
         html_output=html_output,
-        skip_empty=skip_empty,
+        skip_empty=True,
         italicize_quoted_text=effective_italicize_quoted_text(
             html_output,
             italicize_quoted_text,
         ),
+        flatten_note_links=flatten_note_links,
         include_folders=include_folders,
         duplicate_handling=normalized_duplicate_handling,
         sync_to_anki=sync_to_anki,
