@@ -71,7 +71,7 @@ Useful options:
 - `--tag`: match a tag other than `definition`
 - `--html`: render the card back as simple HTML
 - `--italicize-quoted-text`: italicize quoted text when `--html` is enabled
-- `--skip-empty`: skip notes whose cleaned body is empty
+- note bodies that clean down to empty content are skipped automatically
 - `--include-folder`: repeat to include one or more folders inside the vault
 - `--duplicate-handling`: choose how to handle duplicate card fronts: `skip`, `suffix`, or `error`
 - `--anki`: sync matching notes directly to Anki via AnkiConnect
@@ -165,6 +165,8 @@ The exporter also supports:
 - HTML comments being ignored for tag detection
 - markdown link fragments like `[link](#heading)` not counting as tags
 - Obsidian wikilink heading fragments like `[[#heading|label]]` not counting as tags
+- markdown and Obsidian note links being flattened to readable text by default, with a CLI and GUI option to preserve the original link syntax
+- note bodies that clean down to empty content being skipped automatically
 - UTF-8 BOM-prefixed notes
 - dot-prefixed vault folders and files like `.obsidian/`, `.trash/`, and `.Hidden.md` being ignored during scans
 

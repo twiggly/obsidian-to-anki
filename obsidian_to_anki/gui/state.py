@@ -25,6 +25,7 @@ def apply_default_settings(
     default_output_path: str,
     default_target_tag: str,
     default_duplicate_handling: str,
+    default_flatten_note_links: bool,
     default_anki_connect_url: str,
     default_anki_deck: str,
     default_anki_note_type: str,
@@ -39,8 +40,9 @@ def apply_default_settings(
     app.tag_var.set(default_target_tag)
     app.set_selected_tags_in_listbox([])
     app.html_var.set(False)
-    app.skip_empty_var.set(False)
+    app.skip_empty_var.set(True)
     app.quoted_italic_var.set(False)
+    app.flatten_note_links_var.set(default_flatten_note_links)
     app.duplicate_handling_var.set(default_duplicate_handling)
     app.duplicate_handling_display_var.set(
         duplicate_handling_display_label(default_duplicate_handling)
@@ -83,9 +85,12 @@ def apply_saved_settings(
         app.set_selected_tags_in_listbox([])
 
     app.html_var.set(bool(settings.get("html_output", app.html_var.get())))
-    app.skip_empty_var.set(bool(settings.get("skip_empty", app.skip_empty_var.get())))
+    app.skip_empty_var.set(True)
     app.quoted_italic_var.set(
         bool(settings.get("italicize_quoted_text", app.quoted_italic_var.get()))
+    )
+    app.flatten_note_links_var.set(
+        bool(settings.get("flatten_note_links", app.flatten_note_links_var.get()))
     )
 
     saved_duplicate_handling = str(
@@ -135,6 +140,7 @@ def collect_settings(app: object) -> dict[str, object]:
         "html_output": app.html_var.get(),
         "skip_empty": app.skip_empty_var.get(),
         "italicize_quoted_text": app.quoted_italic_var.get(),
+        "flatten_note_links": app.flatten_note_links_var.get(),
         "duplicate_handling": app.duplicate_handling_var.get(),
         "include_folders": app.get_folder_filters_from_listbox(),
         "sync_to_anki": app.sync_to_anki_var.get(),

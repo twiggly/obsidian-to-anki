@@ -72,8 +72,34 @@ class GuiLogicTests(unittest.TestCase):
             self.assertFalse(options.html_output)
             self.assertTrue(options.skip_empty)
             self.assertFalse(options.italicize_quoted_text)
+            self.assertTrue(options.flatten_note_links)
             self.assertEqual(options.include_folders, ("Study",))
             self.assertEqual(options.anki_existing_notes, "skip")
+
+    def test_build_export_options_from_values_accepts_flatten_note_links_toggle(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            vault_path = Path(temp_dir) / "vault"
+            vault_path.mkdir()
+
+            options = build_export_options_from_values(
+                str(vault_path),
+                str(Path(temp_dir) / "out.tsv"),
+                "definition",
+                html_output=False,
+                skip_empty=False,
+                italicize_quoted_text=False,
+                raw_folder_filters=[],
+                duplicate_handling="error",
+                sync_to_anki=False,
+                anki_connect_url="http://127.0.0.1:8765",
+                anki_deck="Default",
+                anki_note_type="Basic",
+                anki_front_field="Front",
+                anki_back_field="Back",
+                flatten_note_links=False,
+            )
+
+            self.assertFalse(options.flatten_note_links)
 
     def test_build_export_options_from_values_accepts_multiple_tags(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

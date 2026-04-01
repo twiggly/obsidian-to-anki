@@ -138,7 +138,7 @@ class CliTests(unittest.TestCase):
             self.assertIn("Keep\tKeep me\tdefinition", content)
             self.assertNotIn("Skip\tSkip me\tdefinition", content)
 
-    def test_main_html_and_skip_empty_flags_affect_output(self) -> None:
+    def test_main_html_automatically_skips_empty_notes(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             vault_path = Path(temp_dir) / "vault"
             vault_path.mkdir()
@@ -157,7 +157,6 @@ class CliTests(unittest.TestCase):
                     str(output_path),
                     "--html",
                     "--italicize-quoted-text",
-                    "--skip-empty",
                 ]
             )
 

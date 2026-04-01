@@ -45,14 +45,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Export card backs as simple HTML for nicer formatting in Anki.",
     )
     parser.add_argument(
-        "--skip-empty",
-        action="store_true",
-        help="Skip notes whose cleaned body is empty.",
-    )
-    parser.add_argument(
         "--italicize-quoted-text",
         action="store_true",
         help="Italicize text inside double quotation marks when using HTML export.",
+    )
+    parser.add_argument(
+        "--preserve-note-links",
+        action="store_true",
+        help="Keep Obsidian and Markdown note-link syntax instead of flattening links to plain text.",
     )
     parser.add_argument(
         "--include-folder",
@@ -142,11 +142,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_path=args.output.expanduser().resolve() if args.output is not None else None,
         target_tag=normalize_tag(args.tag),
         html_output=args.html,
-        skip_empty=args.skip_empty,
+        skip_empty=True,
         italicize_quoted_text=effective_italicize_quoted_text(
             args.html,
             args.italicize_quoted_text,
         ),
+        flatten_note_links=not args.preserve_note_links,
         include_folders=include_folders,
         duplicate_handling=duplicate_handling,
         sync_to_anki=args.anki,

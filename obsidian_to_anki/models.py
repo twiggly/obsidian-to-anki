@@ -19,8 +19,9 @@ class ExportOptions:
     target_tag: str = "definition"
     additional_target_tags: tuple[str, ...] = ()
     html_output: bool = False
-    skip_empty: bool = False
+    skip_empty: bool = True
     italicize_quoted_text: bool = False
+    flatten_note_links: bool = True
     include_folders: tuple[str, ...] = ()
     duplicate_handling: str = "error"
     sync_to_anki: bool = False

@@ -155,6 +155,7 @@ DEFAULT_ANKI_FRONT_FIELD = "Front"
 DEFAULT_ANKI_BACK_FIELD = "Back"
 DEFAULT_ANKI_EXISTING_NOTES = "update"
 DEFAULT_DUPLICATE_HANDLING = "error"
+DEFAULT_FLATTEN_NOTE_LINKS = True
 DEFAULT_STATUS_MESSAGE = "Choose a vault folder and an output file or enable direct Anki sync."
 ANKI_FOCUS_REFRESH_DELAY_MS = 750
 ANKI_POLL_REFRESH_INTERVAL_MS = 15000
@@ -172,8 +173,9 @@ class ExporterApp:
         self.write_tsv_var = tk.BooleanVar(value=True)
         self.tag_var = tk.StringVar(value=DEFAULT_TARGET_TAG)
         self.html_var = tk.BooleanVar(value=False)
-        self.skip_empty_var = tk.BooleanVar(value=False)
+        self.skip_empty_var = tk.BooleanVar(value=True)
         self.quoted_italic_var = tk.BooleanVar(value=False)
+        self.flatten_note_links_var = tk.BooleanVar(value=DEFAULT_FLATTEN_NOTE_LINKS)
         self.duplicate_handling_var = tk.StringVar(value=DEFAULT_DUPLICATE_HANDLING)
         self.duplicate_handling_display_var = tk.StringVar(
             value=duplicate_handling_display_label(DEFAULT_DUPLICATE_HANDLING)
@@ -210,6 +212,7 @@ class ExporterApp:
         self.output_button: ttk.Button
         self.html_checkbutton: ttk.Checkbutton
         self.quoted_italic_checkbutton: ttk.Checkbutton
+        self.flatten_note_links_checkbutton: ttk.Checkbutton
         self.duplicate_handling_combobox: ttk.Combobox
         self.tag_combobox: ttk.Combobox
         self.selected_tags_container: tk.Frame
@@ -248,6 +251,7 @@ class ExporterApp:
             default_output_path=DEFAULT_OUTPUT_PATH,
             default_target_tag=DEFAULT_TARGET_TAG,
             default_duplicate_handling=DEFAULT_DUPLICATE_HANDLING,
+            default_flatten_note_links=DEFAULT_FLATTEN_NOTE_LINKS,
             default_anki_connect_url=DEFAULT_ANKI_CONNECT_URL,
             default_anki_deck=DEFAULT_ANKI_DECK,
             default_anki_note_type=DEFAULT_ANKI_NOTE_TYPE,
@@ -659,6 +663,7 @@ class ExporterApp:
                 self.anki_back_field_var.get(),
                 self.anki_existing_notes_var.get(),
                 write_tsv=self.write_tsv_var.get(),
+                flatten_note_links=self.flatten_note_links_var.get(),
             )
         except FormValidationError as exc:
             messagebox.showerror(exc.title, exc.message)
