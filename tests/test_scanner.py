@@ -49,15 +49,30 @@ class TagExtractionTests(unittest.TestCase):
 
         self.assertEqual(tags, {"definition # note"})
 
-    def test_clean_body_preserves_markdown_link_fragments_while_removing_actual_tags(self) -> None:
+    def test_clean_body_flattens_markdown_links_while_removing_actual_tags(self) -> None:
         cleaned = clean_body("[link](#definition)\n\n#definition")
 
-        self.assertEqual(cleaned, "[link](#definition)")
+        self.assertEqual(cleaned, "link")
 
-    def test_clean_body_preserves_obsidian_wikilink_heading_fragments_while_removing_actual_tags(self) -> None:
+    def test_clean_body_flattens_obsidian_wikilink_heading_fragments_while_removing_actual_tags(self) -> None:
         cleaned = clean_body("[[#definition|label]]\n\n#definition")
 
-        self.assertEqual(cleaned, "[[#definition|label]]")
+        self.assertEqual(cleaned, "label")
+
+    def test_clean_body_flattens_obsidian_wikilinks_to_alias_or_heading_text(self) -> None:
+        cleaned = clean_body("[[Logic#Fallacies]]\n[[Stoicism|Stoic philosophy]]")
+
+        self.assertEqual(cleaned, "Fallacies\nStoic philosophy")
+
+    def test_clean_body_removes_obsidian_note_embeds(self) -> None:
+        cleaned = clean_body("Before\n![[Other Note]]\nAfter")
+
+        self.assertEqual(cleaned, "Before\nAfter")
+
+    def test_clean_body_preserves_link_syntax_inside_code_spans(self) -> None:
+        cleaned = clean_body("Use `[[Logic#Fallacies]]` here")
+
+        self.assertEqual(cleaned, "Use `[[Logic#Fallacies]]` here")
 
 
 class ValidationTests(unittest.TestCase):
