@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from obsidian_to_anki.anki.sync import OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME
 from obsidian_to_anki.gui import app as gui
 from obsidian_to_anki.gui import ExporterApp
 from obsidian_to_anki.gui.logic import FormValidationError
@@ -356,6 +357,70 @@ class GuiControllerTests(unittest.TestCase):
         self.assertTrue(callable(args[2]))
         self.assertIs(args[3].__self__, app)
         self.assertIs(args[3].__func__, ExporterApp.finish_preview_error)
+
+    def test_start_preview_warns_when_anki_sync_is_enabled_without_connection(self) -> None:
+        app = build_controller()
+        options = ExportOptions(
+            vault_path=Path("/tmp/vault"),
+            output_path=Path("/tmp/out.tsv"),
+            sync_to_anki=True,
+            anki_note_type=OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME,
+            duplicate_handling="skip",
+        )
+        app.build_options_from_form = mock.Mock(return_value=options)
+        app.anki_connection_var = FakeVar("Connection failed")
+
+        with (
+            mock.patch.object(gui, "start_preview_scan") as start_preview_scan,
+            mock.patch.object(gui, "messagebox", mock.Mock()) as messagebox_mock,
+        ):
+            ExporterApp.start_preview(app)
+
+        messagebox_mock.showwarning.assert_called_once_with(
+            "Anki warnings",
+            "Anki isn't available right now, so direct sync can't continue. "
+            "Preview will still open, and you can continue with TSV export instead. "
+            "To sync directly, open Anki and make sure the AnkiConnect add-on is available.",
+        )
+        self.assertEqual(
+            app.log.call_args_list[0].args[0],
+            "Warning: Anki isn't available right now, so direct sync can't continue. "
+            "Preview will still open, and you can continue with TSV export instead. "
+            "To sync directly, open Anki and make sure the AnkiConnect add-on is available.",
+        )
+        start_preview_scan.assert_called_once()
+
+    def test_start_preview_warns_when_recommended_note_type_is_not_selected(self) -> None:
+        app = build_controller()
+        options = ExportOptions(
+            vault_path=Path("/tmp/vault"),
+            output_path=Path("/tmp/out.tsv"),
+            sync_to_anki=True,
+            anki_note_type="Basic",
+            duplicate_handling="skip",
+        )
+        app.build_options_from_form = mock.Mock(return_value=options)
+        app.anki_connection_var = FakeVar("Connected")
+
+        with (
+            mock.patch.object(gui, "start_preview_scan") as start_preview_scan,
+            mock.patch.object(gui, "messagebox", mock.Mock()) as messagebox_mock,
+        ):
+            ExporterApp.start_preview(app)
+
+        messagebox_mock.showwarning.assert_called_once_with(
+            "Anki warnings",
+            "The recommended note type 'Term & Definition (Obsidian)' is not selected. "
+            "You can still preview cards, but the installed templates and styling "
+            "won't be used unless you select it.",
+        )
+        self.assertEqual(
+            app.log.call_args_list[0].args[0],
+            "Warning: The recommended note type 'Term & Definition (Obsidian)' is not selected. "
+            "You can still preview cards, but the installed templates and styling "
+            "won't be used unless you select it.",
+        )
+        start_preview_scan.assert_called_once()
 
     def test_build_options_from_form_shows_validation_error(self) -> None:
         app = build_controller()

@@ -149,6 +149,29 @@ class GuiLogicTests(unittest.TestCase):
         self.assertEqual(context.exception.title, "Missing vault")
         self.assertEqual(str(context.exception), "Choose an Obsidian vault folder.")
 
+    def test_build_export_options_from_values_prioritizes_missing_vault_on_blank_form(self) -> None:
+        with self.assertRaises(FormValidationError) as context:
+            build_export_options_from_values(
+                "",
+                "",
+                [],
+                html_output=False,
+                skip_empty=False,
+                italicize_quoted_text=False,
+                raw_folder_filters=[],
+                duplicate_handling="error",
+                sync_to_anki=False,
+                anki_connect_url="http://127.0.0.1:8765",
+                anki_deck="Default",
+                anki_note_type="Basic",
+                anki_front_field="Front",
+                anki_back_field="Back",
+                write_tsv=False,
+            )
+
+        self.assertEqual(context.exception.title, "Missing vault")
+        self.assertEqual(str(context.exception), "Choose an Obsidian vault folder.")
+
     def test_build_export_options_from_values_requires_at_least_one_tag(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             vault_path = Path(temp_dir) / "vault"
@@ -308,9 +331,11 @@ class GuiLogicTests(unittest.TestCase):
             message = duplicate_front_warning_message(duplicate_fronts, "skip")
 
         self.assertIsNotNone(message)
-        self.assertIn("1 duplicate word found.", message or "")
-        self.assertIn("Current handling: keep the first matching note for each word.", message or "")
-        self.assertIn("• Definition (2 matches)\n  Lexicon, Study", message or "")
+        self.assertIn("1 duplicate front found.", message or "")
+        self.assertIn("These fronts appear in more than one note.", message or "")
+        self.assertIn("Current handling: keep the first matching note and ignore the rest.", message or "")
+        self.assertIn("• Definition (2 matches)\n  Found in: Lexicon, Study", message or "")
+        self.assertNotIn("Will become:", message or "")
         self.assertNotIn(str(Path(temp_dir)), message or "")
 
     def test_duplicate_front_warning_message_changes_wording_for_suffix_mode(self) -> None:
@@ -325,10 +350,12 @@ class GuiLogicTests(unittest.TestCase):
 
         self.assertEqual(
             message,
-            "1 duplicate word found.\n"
-            "Current handling: rename duplicate fronts with folder suffixes.\n\n"
+            "1 duplicate front found.\n"
+            "These fronts appear in more than one note.\n"
+            "Current handling: keep all matching notes and add folder suffixes to each front.\n\n"
             "• Definition (2 matches)\n"
-            "  Lexicon, Study",
+            "  Found in: Lexicon, Study\n"
+            "  Will become: Definition (Lexicon), Definition (Study)",
         )
 
     def test_delivery_message_helpers_format_expected_text(self) -> None:

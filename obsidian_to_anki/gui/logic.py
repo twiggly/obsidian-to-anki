@@ -69,13 +69,13 @@ def build_export_options_from_values(
     output_value = output.strip()
     raw_tags = [tag] if isinstance(tag, str) else list(tag)
 
+    if not vault_value:
+        raise FormValidationError("Missing vault", "Choose an Obsidian vault folder.")
+
     if not any(str(value).strip() for value in raw_tags):
         raise FormValidationError("Missing tags", "Choose at least one tag to match.")
 
     target_tags = normalize_target_tags(tag)
-
-    if not vault_value:
-        raise FormValidationError("Missing vault", "Choose an Obsidian vault folder.")
 
     if write_tsv and not output_value:
         raise FormValidationError(
@@ -235,33 +235,40 @@ def duplicate_front_warning_message(
     duplicate_count = len(duplicate_fronts)
     return (
         f"{duplicate_popup_intro_message(duplicate_handling, duplicate_count)}\n\n"
-        f"{build_duplicate_folder_summary(duplicate_fronts)}"
+        f"{build_duplicate_folder_summary(duplicate_fronts, duplicate_handling)}"
     )
 
 
 def duplicate_popup_intro_message(duplicate_handling: str, duplicate_count: int) -> str:
-    noun = "word" if duplicate_count == 1 else "words"
+    noun = "front" if duplicate_count == 1 else "fronts"
     summary = f"{duplicate_count} duplicate {noun} found."
 
     if duplicate_handling == "skip":
-        behavior = "Current handling: keep the first matching note for each word."
+        behavior = "Current handling: keep the first matching note and ignore the rest."
     elif duplicate_handling == "suffix":
-        behavior = "Current handling: rename duplicate fronts with folder suffixes."
+        behavior = "Current handling: keep all matching notes and add folder suffixes to each front."
     elif duplicate_handling == "error":
         behavior = "Current handling: stop before export or sync until the duplicates are resolved."
     else:
         behavior = "Current handling: keep all duplicate notes."
 
-    return f"{summary}\n{behavior}"
+    return f"{summary}\nThese fronts appear in more than one note.\n{behavior}"
 
 
-def build_duplicate_folder_summary(duplicate_fronts: dict[str, tuple[Path, ...]]) -> str:
+def build_duplicate_folder_summary(
+    duplicate_fronts: dict[str, tuple[Path, ...]],
+    duplicate_handling: str,
+) -> str:
     lines: list[str] = []
 
     for front, paths in duplicate_fronts.items():
-        labels = ", ".join(duplicate_parent_folder_labels(paths))
+        labels = duplicate_parent_folder_labels(paths)
         lines.append(f"\u2022 {front} ({len(paths)} matches)")
-        lines.append(f"  {labels}")
+        lines.append(f"  Found in: {', '.join(labels)}")
+        if duplicate_handling == "suffix":
+            renamed_fronts = ", ".join(f"{front} ({label})" for label in labels)
+            if renamed_fronts:
+                lines.append(f"  Will become: {renamed_fronts}")
 
     return "\n".join(lines)
 

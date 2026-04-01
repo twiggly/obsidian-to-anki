@@ -153,7 +153,7 @@ def build_formatting_section(app: object, parent: object) -> object:
         "Choose what to do when multiple Obsidian notes would produce the same card front. "
         "'Stop' pauses before export or sync so you can review the duplicates. "
         "'Keep first' uses the first matching note and ignores the rest. "
-        "'Rename duplicates' keeps them all and adds folder labels to make each front unique. "
+        "'Rename' keeps them all and adds folder labels to make each front unique. "
         "For example, 'Term' becomes 'Term (Lexicon)' and 'Term (Study)'."
     )
     attach_tooltip(duplicate_label, duplicate_tooltip)

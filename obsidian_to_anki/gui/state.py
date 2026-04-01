@@ -36,7 +36,7 @@ def apply_default_settings(
 ) -> None:
     app.vault_var.set("")
     app.output_var.set(default_output_path)
-    app.write_tsv_var.set(True)
+    app.write_tsv_var.set(False)
     app.tag_var.set(default_target_tag)
     app.set_selected_tags_in_listbox([])
     app.html_var.set(False)
