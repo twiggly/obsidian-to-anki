@@ -26,7 +26,7 @@ DUPLICATE_PATH_LIMIT = 3
 DUPLICATE_HANDLING_CHOICES = ("skip", "suffix", "error")
 DUPLICATE_HANDLING_LABELS = {
     "skip": "Keep first",
-    "suffix": "Rename duplicates",
+    "suffix": "Rename",
     "error": "Stop",
 }
 DUPLICATE_HANDLING_DISPLAY_CHOICES = tuple(

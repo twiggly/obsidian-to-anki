@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Callable
 
+from ..anki.sync import OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME
 from ..models import AnkiPreflightSummary, DeliveryResult, ExportOptions, ScanResult
 
 
@@ -48,6 +49,7 @@ def start_preview(
     replace_options: Callable[..., ExportOptions],
     format_target_tags: Callable[[str, tuple[str, ...]], str],
     start_preview_scan: Callable[..., None],
+    messagebox_module: object,
 ) -> None:
     if app.is_busy:
         return
@@ -55,6 +57,35 @@ def start_preview(
     options = app.build_options_from_form()
     if options is None:
         return
+
+    preview_warnings: list[str] = []
+    if options.sync_to_anki and app.anki_connection_var.get() == "Connection failed":
+        if options.output_path is None:
+            preview_warnings.append(
+                "Anki isn't available right now, so direct sync can't continue. "
+                "Preview will still open, but you'll need to open Anki and make sure the AnkiConnect add-on is available before syncing."
+            )
+        else:
+            preview_warnings.append(
+                "Anki isn't available right now, so direct sync can't continue. "
+                "Preview will still open, and you can continue with TSV export instead. "
+                "To sync directly, open Anki and make sure the AnkiConnect add-on is available."
+            )
+
+    if (
+        options.sync_to_anki
+        and options.anki_note_type.strip() != OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME
+    ):
+        preview_warnings.append(
+            f"The recommended note type '{OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME}' is not selected. "
+            "You can still preview cards, but the installed templates and styling "
+            "won't be used unless you select it."
+        )
+
+    if preview_warnings:
+        for warning_message in preview_warnings:
+            app.log(f"Warning: {warning_message}")
+        messagebox_module.showwarning("Anki warnings", "\n\n".join(preview_warnings))
 
     app.set_busy(True)
     app.status_var.set("Generating preview…")

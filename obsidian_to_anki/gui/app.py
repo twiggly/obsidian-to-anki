@@ -155,8 +155,8 @@ DEFAULT_ANKI_FRONT_FIELD = "Front"
 DEFAULT_ANKI_BACK_FIELD = "Back"
 DEFAULT_ANKI_EXISTING_NOTES = "update"
 DEFAULT_DUPLICATE_HANDLING = "error"
-DEFAULT_FLATTEN_NOTE_LINKS = True
-DEFAULT_STATUS_MESSAGE = "Choose a vault folder and an output file or enable direct Anki sync."
+DEFAULT_FLATTEN_NOTE_LINKS = False
+DEFAULT_STATUS_MESSAGE = "Choose a vault folder, then turn on Output TSV or enable direct Anki sync."
 ANKI_FOCUS_REFRESH_DELAY_MS = 750
 ANKI_POLL_REFRESH_INTERVAL_MS = 15000
 
@@ -170,7 +170,7 @@ class ExporterApp:
 
         self.vault_var = tk.StringVar()
         self.output_var = tk.StringVar(value=DEFAULT_OUTPUT_PATH)
-        self.write_tsv_var = tk.BooleanVar(value=True)
+        self.write_tsv_var = tk.BooleanVar(value=False)
         self.tag_var = tk.StringVar(value=DEFAULT_TARGET_TAG)
         self.html_var = tk.BooleanVar(value=False)
         self.skip_empty_var = tk.BooleanVar(value=True)
@@ -678,6 +678,7 @@ class ExporterApp:
             replace_options=replace,
             format_target_tags=format_target_tags,
             start_preview_scan=start_preview_scan,
+            messagebox_module=messagebox,
         )
 
     def finish_preview_success(
