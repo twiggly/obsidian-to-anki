@@ -18,10 +18,11 @@ from .common import (
 )
 from .delivery import deliver_cards
 from .gui import launch_gui
-from .gui_logic import delivery_complete_message, timing_breakdown_lines
+from .gui.logic import delivery_complete_message, timing_breakdown_lines
 from .models import ExportError, ExportOptions
 from .reporting import attach_delivery_report
-from .scanner import build_duplicate_summary, normalize_folder_filters, scan_cards
+from .scan_filters import normalize_folder_filters
+from .scanner_engine import build_duplicate_summary, scan_cards
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:

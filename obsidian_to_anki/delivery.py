@@ -3,7 +3,7 @@ from __future__ import annotations
 from time import perf_counter
 from typing import Callable, Sequence
 
-from .anki_sync import sync_cards_to_anki
+from .anki.sync import sync_cards_to_anki
 from .exporting import run_export
 from .models import AnkiSyncResult, DeliveryResult, ExportOptions, NoteCard
 
