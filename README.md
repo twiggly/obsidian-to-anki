@@ -45,7 +45,7 @@ python3 -m obsidian_to_anki
 The GUI flow is:
 
 1. choose a vault
-2. optionally keep TSV export enabled and choose an output file
+2. optionally turn on TSV export and choose an output file
 3. select one or more tags to match
 4. optionally limit the scan to specific folders
 5. preview the first matching cards before exporting or syncing, unless duplicate handling is set to `error` and duplicates must be resolved first
@@ -55,8 +55,17 @@ When direct Anki sync is enabled in the GUI:
 - the connection indicator checks AnkiConnect automatically
 - the deck and note type dropdowns populate from AnkiConnect
 - existing notes can be skipped or updated
+- `Install 'Term & Definition' Note Type` installs or updates the bundled `Term & Definition (Obsidian)` note type with forward and reverse cards
+- `Apply Recommended Deck Settings` creates or updates a dedicated deck preset for the selected deck
+- preview warns if Anki is unavailable or the recommended note type is not selected, but still opens so you can inspect cards
 - the last-used GUI settings are restored the next time you open the app
 - the status area keeps a compact summary by default, with expandable details
+
+Current GUI defaults:
+
+- `Output TSV` starts turned off
+- `Flatten note links` starts turned off
+- note bodies that clean down to empty content are skipped automatically
 
 ### CLI
 
@@ -71,6 +80,7 @@ Useful options:
 - `--tag`: match a tag other than `definition`
 - `--html`: render the card back as simple HTML
 - `--italicize-quoted-text`: italicize quoted text when `--html` is enabled
+- `--preserve-note-links`: keep Obsidian and Markdown note-link syntax instead of flattening links to plain text
 - note bodies that clean down to empty content are skipped automatically
 - `--include-folder`: repeat to include one or more folders inside the vault
 - `--duplicate-handling`: choose how to handle duplicate card fronts: `skip`, `suffix`, or `error`
@@ -165,7 +175,7 @@ The exporter also supports:
 - HTML comments being ignored for tag detection
 - markdown link fragments like `[link](#heading)` not counting as tags
 - Obsidian wikilink heading fragments like `[[#heading|label]]` not counting as tags
-- markdown and Obsidian note links being flattened to readable text by default, with a CLI and GUI option to preserve the original link syntax
+- markdown and Obsidian note links being flattened to readable text by default in the CLI, with a GUI toggle to turn link flattening on when you want it
 - note bodies that clean down to empty content being skipped automatically
 - UTF-8 BOM-prefixed notes
 - dot-prefixed vault folders and files like `.obsidian/`, `.trash/`, and `.Hidden.md` being ignored during scans
