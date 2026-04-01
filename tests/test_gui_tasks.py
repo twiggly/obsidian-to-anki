@@ -4,13 +4,17 @@ from pathlib import Path
 from obsidian_to_anki.common import unexpected_error_message
 from obsidian_to_anki.gui.tasks import (
     run_anki_catalog_callbacks,
+    run_anki_deck_settings_callbacks,
     run_anki_field_catalog_callbacks,
+    run_anki_note_type_install_callbacks,
     run_delivery_callbacks,
     run_preview_scan_callbacks,
     run_tag_catalog_callbacks,
 )
 from obsidian_to_anki.models import (
     AnkiCatalog,
+    AnkiDeckSettingsResult,
+    AnkiNoteTypeInstallResult,
     AnkiPreflightSummary,
     AnkiFieldCatalog,
     DeliveryResult,
@@ -107,6 +111,71 @@ class GuiTaskTests(unittest.TestCase):
         )
 
         self.assertEqual(calls, [("success", expected_catalog, None)])
+
+    def test_run_anki_note_type_install_callbacks_routes_success(self) -> None:
+        expected_result = AnkiNoteTypeInstallResult(
+            note_type_name="Term & Definition (Obsidian)",
+            created=True,
+        )
+        calls: list[tuple[str, object, object | None]] = []
+
+        run_anki_note_type_install_callbacks(
+            "http://127.0.0.1:8765",
+            lambda result: calls.append(("success", result, None)),
+            lambda error_message, details=None: calls.append(("error", error_message, details)),
+            install_fn=lambda url: expected_result,
+        )
+
+        self.assertEqual(calls, [("success", expected_result, None)])
+
+    def test_run_anki_note_type_install_callbacks_routes_export_errors(self) -> None:
+        calls: list[tuple[str, str, str | None]] = []
+
+        def fail_install(_: str) -> AnkiNoteTypeInstallResult:
+            raise ExportError("Install failed")
+
+        run_anki_note_type_install_callbacks(
+            "http://127.0.0.1:8765",
+            lambda result: calls.append(("success", str(result), None)),
+            lambda error_message, details=None: calls.append(("error", error_message, details)),
+            install_fn=fail_install,
+        )
+
+        self.assertEqual(calls, [("error", "Install failed", None)])
+
+    def test_run_anki_deck_settings_callbacks_routes_success(self) -> None:
+        expected_result = AnkiDeckSettingsResult(
+            deck_name="Obsidian",
+            preset_name="Term & Definition (Obsidian) - Obsidian",
+            created=True,
+        )
+        calls: list[tuple[str, object, object | None]] = []
+
+        run_anki_deck_settings_callbacks(
+            "http://127.0.0.1:8765",
+            "Obsidian",
+            lambda result: calls.append(("success", result, None)),
+            lambda error_message, details=None: calls.append(("error", error_message, details)),
+            apply_fn=lambda url, deck_name: expected_result,
+        )
+
+        self.assertEqual(calls, [("success", expected_result, None)])
+
+    def test_run_anki_deck_settings_callbacks_routes_export_errors(self) -> None:
+        calls: list[tuple[str, str, str | None]] = []
+
+        def fail_apply(_: str, __: str) -> AnkiDeckSettingsResult:
+            raise ExportError("Deck settings failed")
+
+        run_anki_deck_settings_callbacks(
+            "http://127.0.0.1:8765",
+            "Obsidian",
+            lambda result: calls.append(("success", str(result), None)),
+            lambda error_message, details=None: calls.append(("error", error_message, details)),
+            apply_fn=fail_apply,
+        )
+
+        self.assertEqual(calls, [("error", "Deck settings failed", None)])
 
     def test_run_preview_scan_callbacks_routes_success(self) -> None:
         options = ExportOptions(

@@ -5,11 +5,19 @@ import traceback
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
-from ..anki.sync import build_anki_preflight_summary, fetch_anki_catalog, fetch_note_type_fields
+from ..anki.sync import (
+    apply_recommended_deck_settings,
+    build_anki_preflight_summary,
+    fetch_anki_catalog,
+    fetch_note_type_fields,
+    install_obsidian_definitions_note_type,
+)
 from ..common import PREVIEW_CARD_LIMIT, unexpected_error_message
 from ..delivery import deliver_cards
 from ..models import (
     AnkiCatalog,
+    AnkiDeckSettingsResult,
+    AnkiNoteTypeInstallResult,
     AnkiPreflightSummary,
     AnkiFieldCatalog,
     DeliveryResult,
@@ -177,6 +185,77 @@ def start_anki_field_catalog_refresh(
             anki_connect_url,
             note_type_name,
             lambda field_catalog: root.after(0, on_success, field_catalog),
+            lambda error_message, details=None: root.after(0, on_error, error_message, details),
+        )
+
+    threading.Thread(target=worker, daemon=True).start()
+
+
+def run_anki_note_type_install_callbacks(
+    anki_connect_url: str,
+    on_success: Callable[[AnkiNoteTypeInstallResult], None],
+    on_error: Callable[[str, str | None], None],
+    install_fn: Callable[[str], AnkiNoteTypeInstallResult] = install_obsidian_definitions_note_type,
+) -> None:
+    try:
+        result = install_fn(anki_connect_url)
+        on_success(result)
+    except (ExportError, OSError) as exc:
+        on_error(str(exc), None)
+    except Exception:
+        on_error(
+            unexpected_error_message("note type install"),
+            traceback.format_exc(),
+        )
+
+
+def run_anki_deck_settings_callbacks(
+    anki_connect_url: str,
+    deck_name: str,
+    on_success: Callable[[AnkiDeckSettingsResult], None],
+    on_error: Callable[[str, str | None], None],
+    apply_fn: Callable[[str, str], AnkiDeckSettingsResult] = apply_recommended_deck_settings,
+) -> None:
+    try:
+        result = apply_fn(anki_connect_url, deck_name)
+        on_success(result)
+    except (ExportError, OSError) as exc:
+        on_error(str(exc), None)
+    except Exception:
+        on_error(
+            unexpected_error_message("deck settings update"),
+            traceback.format_exc(),
+        )
+
+
+def start_anki_note_type_install(
+    root: tk.Misc,
+    anki_connect_url: str,
+    on_success: Callable[[AnkiNoteTypeInstallResult], None],
+    on_error: Callable[[str, str | None], None],
+) -> None:
+    def worker() -> None:
+        run_anki_note_type_install_callbacks(
+            anki_connect_url,
+            lambda result: root.after(0, on_success, result),
+            lambda error_message, details=None: root.after(0, on_error, error_message, details),
+        )
+
+    threading.Thread(target=worker, daemon=True).start()
+
+
+def start_anki_deck_settings_update(
+    root: tk.Misc,
+    anki_connect_url: str,
+    deck_name: str,
+    on_success: Callable[[AnkiDeckSettingsResult], None],
+    on_error: Callable[[str, str | None], None],
+) -> None:
+    def worker() -> None:
+        run_anki_deck_settings_callbacks(
+            anki_connect_url,
+            deck_name,
+            lambda result: root.after(0, on_success, result),
             lambda error_message, details=None: root.after(0, on_error, error_message, details),
         )
 

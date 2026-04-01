@@ -7,6 +7,8 @@ from obsidian_to_anki.gui import ExporterApp
 from obsidian_to_anki.gui.logic import FormValidationError
 from obsidian_to_anki.models import (
     AnkiCatalog,
+    AnkiDeckSettingsResult,
+    AnkiNoteTypeInstallResult,
     AnkiPreflightSummary,
     AnkiFieldCatalog,
     AnkiSyncResult,
@@ -135,6 +137,8 @@ def build_controller() -> ExporterApp:
     app.output_button = FakeButton()
     app.tag_scan_button = FakeButton()
     app.add_folder_button = FakeButton()
+    app.install_note_type_button = FakeButton()
+    app.apply_deck_settings_button = FakeButton()
     app.anki_connection_indicator = FakeButton()
     app.tag_combobox = FakeCombobox("definition")
     app.selected_tags_container = mock.Mock()
@@ -160,6 +164,8 @@ def build_controller() -> ExporterApp:
     app._last_loaded_anki_note_type = None
     app._pending_anki_catalog_url = None
     app._pending_anki_field_key = None
+    app._anki_note_type_install_loading = False
+    app._anki_deck_settings_loading = False
     app._anki_refresh_after_id = None
     app._anki_poll_after_id = None
     return app
@@ -476,6 +482,78 @@ class GuiControllerTests(unittest.TestCase):
         self.assertIs(args[0], app.root)
         self.assertEqual(args[1], "http://127.0.0.1:8765")
 
+    def test_install_obsidian_definitions_note_type_starts_background_install(self) -> None:
+        app = build_controller()
+
+        with mock.patch.object(gui, "start_anki_note_type_install") as start_anki_note_type_install:
+            ExporterApp.install_obsidian_definitions_note_type(app)
+
+        self.assertTrue(app.is_busy)
+        self.assertEqual(app.status_var.get(), "Installing the Term & Definition (Obsidian) note type…")
+        self.assertEqual(
+            app.log.call_args_list[0].args[0],
+            "Installing or updating the Term & Definition (Obsidian) note type in Anki.",
+        )
+        args = start_anki_note_type_install.call_args.args
+        self.assertIs(args[0], app.root)
+        self.assertEqual(args[1], "http://127.0.0.1:8765")
+        self.assertIs(args[2].__self__, app)
+        self.assertIs(args[2].__func__, ExporterApp.finish_anki_note_type_install_success)
+        self.assertIs(args[3].__self__, app)
+        self.assertIs(args[3].__func__, ExporterApp.finish_anki_note_type_install_error)
+
+    def test_apply_recommended_deck_settings_starts_background_update(self) -> None:
+        app = build_controller()
+
+        with (
+            mock.patch.object(gui, "start_anki_deck_settings_update") as start_anki_deck_settings_update,
+            mock.patch.object(gui, "messagebox", mock.Mock()) as messagebox_mock,
+        ):
+            messagebox_mock.askyesno.return_value = True
+            ExporterApp.apply_recommended_deck_settings(app)
+
+        self.assertTrue(app.is_busy)
+        self.assertEqual(app.status_var.get(), "Applying the recommended deck settings to 'Default'…")
+        self.assertEqual(
+            app.log.call_args_list[0].args[0],
+            "Applying the recommended deck settings to 'Default' in Anki.",
+        )
+        messagebox_mock.askyesno.assert_called_once()
+        args = start_anki_deck_settings_update.call_args.args
+        self.assertIs(args[0], app.root)
+        self.assertEqual(args[1], "http://127.0.0.1:8765")
+        self.assertEqual(args[2], "Default")
+        self.assertIs(args[3].__self__, app)
+        self.assertIs(args[3].__func__, ExporterApp.finish_anki_deck_settings_success)
+        self.assertIs(args[4].__self__, app)
+        self.assertIs(args[4].__func__, ExporterApp.finish_anki_deck_settings_error)
+
+    def test_apply_recommended_deck_settings_stops_when_confirmation_is_declined(self) -> None:
+        app = build_controller()
+
+        with (
+            mock.patch.object(gui, "start_anki_deck_settings_update") as start_anki_deck_settings_update,
+            mock.patch.object(gui, "messagebox", mock.Mock()) as messagebox_mock,
+        ):
+            messagebox_mock.askyesno.return_value = False
+            ExporterApp.apply_recommended_deck_settings(app)
+
+        self.assertFalse(app.is_busy)
+        start_anki_deck_settings_update.assert_not_called()
+
+    def test_apply_recommended_deck_settings_requires_selected_deck(self) -> None:
+        app = build_controller()
+        app.anki_deck_var = FakeVar("")
+
+        with mock.patch.object(gui, "messagebox", mock.Mock()) as messagebox_mock:
+            ExporterApp.apply_recommended_deck_settings(app)
+
+        self.assertFalse(app.is_busy)
+        messagebox_mock.showerror.assert_called_once_with(
+            "Deck settings update failed",
+            "Choose an Anki deck before applying the recommended deck settings.",
+        )
+
     def test_refresh_anki_catalog_quietly_keeps_visible_connection_state(self) -> None:
         app = build_controller()
         app.anki_connection_var = FakeVar("Connected")
@@ -622,6 +700,74 @@ class GuiControllerTests(unittest.TestCase):
         self.assertEqual(app.anki_front_field_combobox.values, ("Front", "Back", "Tags"))
         self.assertEqual(app.anki_back_field_combobox.values, ("Front", "Back", "Tags"))
         self.assertEqual(app.status_var.get(), "Loaded 3 fields for note type 'Basic'.")
+
+    def test_finish_anki_note_type_install_success_selects_installed_note_type(self) -> None:
+        app = build_controller()
+        app.sync_to_anki_var = FakeVar(True)
+        app.is_busy = True
+        result = AnkiNoteTypeInstallResult(note_type_name="Term & Definition (Obsidian)", created=True)
+
+        with mock.patch.object(gui, "messagebox", mock.Mock()) as messagebox_mock:
+            ExporterApp.finish_anki_note_type_install_success(app, result)
+
+        self.assertFalse(app.is_busy)
+        self.assertEqual(app.anki_connection_var.get(), "Connected")
+        self.assertEqual(app.anki_note_type_var.get(), "Term & Definition (Obsidian)")
+        self.assertIn("Term & Definition (Obsidian)", app.anki_note_type_combobox.values)
+        self.assertEqual(app.anki_front_field_var.get(), "Front")
+        self.assertEqual(app.anki_back_field_var.get(), "Back")
+        self.assertEqual(
+            app.status_var.get(),
+            "Installed the Anki note type 'Term & Definition (Obsidian)' with forward and reverse definition cards.",
+        )
+        messagebox_mock.showinfo.assert_called_once()
+
+    def test_finish_anki_note_type_install_error_shows_message(self) -> None:
+        app = build_controller()
+        app.is_busy = True
+
+        with mock.patch.object(gui, "messagebox", mock.Mock()) as messagebox_mock:
+            ExporterApp.finish_anki_note_type_install_error(app, "Install failed")
+
+        self.assertFalse(app.is_busy)
+        self.assertEqual(app.status_var.get(), "Install failed")
+        self.assertEqual(app.log.call_args_list[-1].args[0], "Error: Install failed")
+        messagebox_mock.showerror.assert_called_once_with("Note type install failed", "Install failed")
+
+    def test_finish_anki_deck_settings_success_shows_message(self) -> None:
+        app = build_controller()
+        app.is_busy = True
+        result = AnkiDeckSettingsResult(
+            deck_name="Obsidian",
+            preset_name="Term & Definition (Obsidian) - Obsidian",
+            created=True,
+        )
+
+        with mock.patch.object(gui, "messagebox", mock.Mock()) as messagebox_mock:
+            ExporterApp.finish_anki_deck_settings_success(app, result)
+
+        self.assertFalse(app.is_busy)
+        self.assertEqual(app.anki_connection_var.get(), "Connected")
+        self.assertEqual(
+            app.status_var.get(),
+            "Applied the recommended deck settings to 'Obsidian' using the preset 'Term & Definition (Obsidian) - Obsidian'.",
+        )
+        messagebox_mock.showinfo.assert_called_once()
+
+    def test_finish_anki_deck_settings_error_shows_message(self) -> None:
+        app = build_controller()
+        app.is_busy = True
+
+        with mock.patch.object(gui, "messagebox", mock.Mock()) as messagebox_mock:
+            ExporterApp.finish_anki_deck_settings_error(app, "Deck settings failed")
+
+        self.assertFalse(app.is_busy)
+        self.assertEqual(app.status_var.get(), "Deck settings failed")
+        self.assertEqual(app.log.call_args_list[-1].args[0], "Error: Deck settings failed")
+        messagebox_mock.showerror.assert_called_once_with(
+            "Deck settings update failed",
+            "Deck settings failed",
+        )
 
     def test_finish_delivery_success_updates_status_and_shows_completion(self) -> None:
         app = build_controller()
