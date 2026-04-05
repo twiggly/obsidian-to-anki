@@ -544,6 +544,10 @@ class ExporterApp:
     def on_anki_note_type_change(self, _: object | None = None) -> None:
         self.refresh_anki_fields_if_needed()
 
+    def on_anki_target_interact(self, _: object | None = None) -> None:
+        if self.sync_to_anki_var.get():
+            self.refresh_anki_catalog(show_error_dialog=False, quiet=True)
+
     def on_root_focus(self, _: object | None = None) -> None:
         if self.sync_to_anki_var.get():
             self.schedule_anki_connection_refresh()
@@ -570,7 +574,7 @@ class ExporterApp:
     def run_anki_connection_refresh(self) -> None:
         self._anki_refresh_after_id = None
         if self.sync_to_anki_var.get():
-            self.refresh_anki_connection(show_error_dialog=False, quiet=True)
+            self.refresh_anki_catalog(show_error_dialog=False, quiet=True)
 
     def stop_anki_connection_polling(self) -> None:
         after_id = self._anki_poll_after_id
