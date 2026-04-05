@@ -218,6 +218,9 @@ def build_anki_section(app: object, parent: object) -> object:
         values=(app.anki_deck_var.get(),),
     )
     app.anki_deck_combobox.grid(row=1, column=1, sticky="ew", padx=(10, 10), pady=(4, 0))
+    app.anki_deck_combobox.bind("<Button-1>", app.on_anki_target_interact, add="+")
+    app.anki_deck_combobox.bind("<FocusIn>", app.on_anki_target_interact, add="+")
+    app.anki_deck_combobox.bind("<Down>", app.on_anki_target_interact, add="+")
 
     note_type_label = ttk.Label(anki_options, text="Note type", style="FieldLabel.TLabel")
     note_type_label.grid(row=1, column=2, sticky="w", pady=(4, 0))

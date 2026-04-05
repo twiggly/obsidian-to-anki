@@ -669,6 +669,24 @@ class GuiControllerTests(unittest.TestCase):
 
         app.schedule_anki_connection_refresh.assert_called_once_with()
 
+    def test_on_anki_target_interact_refreshes_anki_catalog_when_sync_is_on(self) -> None:
+        app = build_controller()
+        app.sync_to_anki_var = FakeVar(True)
+        app.refresh_anki_catalog = mock.Mock()
+
+        ExporterApp.on_anki_target_interact(app)
+
+        app.refresh_anki_catalog.assert_called_once_with(show_error_dialog=False, quiet=True)
+
+    def test_on_anki_target_interact_does_nothing_when_sync_is_off(self) -> None:
+        app = build_controller()
+        app.sync_to_anki_var = FakeVar(False)
+        app.refresh_anki_catalog = mock.Mock()
+
+        ExporterApp.on_anki_target_interact(app)
+
+        app.refresh_anki_catalog.assert_not_called()
+
     def test_on_root_focus_does_not_refresh_anki_catalog_when_sync_is_off(self) -> None:
         app = build_controller()
         app.sync_to_anki_var = FakeVar(False)
@@ -690,14 +708,14 @@ class GuiControllerTests(unittest.TestCase):
         self.assertEqual(app.root.after_calls[1][0], gui.ANKI_FOCUS_REFRESH_DELAY_MS)
         self.assertEqual(app.root.after_cancel_calls, [first_after_id])
 
-    def test_run_anki_connection_refresh_uses_quiet_refresh(self) -> None:
+    def test_run_anki_connection_refresh_uses_quiet_catalog_refresh(self) -> None:
         app = build_controller()
         app.sync_to_anki_var = FakeVar(True)
-        app.refresh_anki_connection = mock.Mock()
+        app.refresh_anki_catalog = mock.Mock()
 
         ExporterApp.run_anki_connection_refresh(app)
 
-        app.refresh_anki_connection.assert_called_once_with(show_error_dialog=False, quiet=True)
+        app.refresh_anki_catalog.assert_called_once_with(show_error_dialog=False, quiet=True)
 
     def test_run_anki_connection_poll_uses_quiet_connection_check_and_reschedules(self) -> None:
         app = build_controller()
