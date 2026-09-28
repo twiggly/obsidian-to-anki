@@ -1,14 +1,31 @@
-.PHONY: help test sync-main branch pr
+PYTHON ?= python3
+
+.PHONY: help test lint format format-check check sync-main branch pr
 
 help:
 	@printf '%s\n' \
 		'make test                 Run the test suite' \
+		'make lint                 Run Ruff lint checks' \
+		'make format               Format Python files with Ruff' \
+		'make format-check         Check Python formatting' \
+		'make check                Run lint, formatting checks, and tests' \
 		'make sync-main            Switch to main and fast-forward from origin/main' \
 		'make branch NAME=slug     Create and switch to codex/slug' \
 		'make pr                   Run tests, push the current branch, and open a draft PR'
 
 test:
-	python3 -m unittest discover -s tests -v
+	$(PYTHON) -m unittest discover -s tests -v
+
+lint:
+	$(PYTHON) -m ruff check .
+
+format:
+	$(PYTHON) -m ruff format .
+
+format-check:
+	$(PYTHON) -m ruff format --check .
+
+check: lint format-check test
 
 sync-main:
 	git switch main
