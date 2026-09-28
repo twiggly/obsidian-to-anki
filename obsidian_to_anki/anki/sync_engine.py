@@ -64,8 +64,12 @@ def add_single_note(
     return note_id
 
 
-def _validate_can_add_results(can_add: object) -> tuple[bool, ...]:
-    if not isinstance(can_add, list) or not all(isinstance(item, bool) for item in can_add):
+def _validate_can_add_results(can_add: object, expected_count: int) -> tuple[bool, ...]:
+    if (
+        not isinstance(can_add, list)
+        or len(can_add) != expected_count
+        or not all(isinstance(item, bool) for item in can_add)
+    ):
         raise AnkiConnectError(unexpected_anki_response_message("canAddNotes"))
     return tuple(can_add)
 
@@ -121,7 +125,8 @@ def _prepare_sync(
         existing_lookup_seconds = perf_counter() - existing_lookup_started_at
     can_add_started_at = perf_counter()
     can_add = _validate_can_add_results(
-        invoke_anki_connect_fn(options.anki_connect_url, "canAddNotes", {"notes": notes})
+        invoke_anki_connect_fn(options.anki_connect_url, "canAddNotes", {"notes": notes}),
+        len(notes),
     )
     return _PreparedSync(
         notes=notes,
@@ -306,6 +311,13 @@ def sync_cards_to_anki(
     build_existing_note_snapshot_fn: Callable[[int, dict[str, object]], ExistingAnkiNote],
     preflight_result: AnkiPreflightResult | None = None,
 ) -> AnkiSyncResult:
+    if preflight_result is not None:
+        if (
+            len(preflight_result.notes) != len(cards)
+            or len(preflight_result.can_add) != len(cards)
+            or not all(isinstance(allowed, bool) for allowed in preflight_result.can_add)
+        ):
+            raise AnkiConnectError("Cached Anki preview data is inconsistent. Preview cards again.")
     if not cards:
         return AnkiSyncResult(
             added_count=0,
