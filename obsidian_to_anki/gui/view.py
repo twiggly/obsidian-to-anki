@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Sequence
+from typing import TYPE_CHECKING
 
 from .sections import (
     build_actions_section,
@@ -9,7 +10,8 @@ from .sections import (
     build_formatting_section,
     build_source_section,
 )
-from .widgets import attach_tooltip, build_status_section
+from .widgets import attach_tooltip as attach_tooltip
+from .widgets import build_status_section
 
 if TYPE_CHECKING:
     import tkinter as tk
@@ -37,7 +39,9 @@ def append_unique_value(existing_values: Sequence[str], new_value: str) -> list[
     return [*existing_values, normalized_new_filter]
 
 
-def remove_selected_values(existing_values: Sequence[str], selected_indexes: Sequence[int]) -> list[str]:
+def remove_selected_values(
+    existing_values: Sequence[str], selected_indexes: Sequence[int]
+) -> list[str]:
     selected = {index for index in selected_indexes if 0 <= index < len(existing_values)}
     return [value for index, value in enumerate(existing_values) if index not in selected]
 
@@ -46,8 +50,11 @@ def append_folder_filter(existing_filters: Sequence[str], new_filter: str) -> li
     return append_unique_value(existing_filters, new_filter)
 
 
-def remove_folder_filters(existing_filters: Sequence[str], selected_indexes: Sequence[int]) -> list[str]:
+def remove_folder_filters(
+    existing_filters: Sequence[str], selected_indexes: Sequence[int]
+) -> list[str]:
     return remove_selected_values(existing_filters, selected_indexes)
+
 
 def build_main_window(app: object) -> None:
     if tk is None or ttk is None:
@@ -209,7 +216,9 @@ def add_folder_filter_from_dialog(
         messagebox.showerror("Invalid vault", "The selected vault folder does not exist.")
         return None
 
-    selected_folder = filedialog.askdirectory(title="Select folder to include", initialdir=str(vault_path))
+    selected_folder = filedialog.askdirectory(
+        title="Select folder to include", initialdir=str(vault_path)
+    )
     if not selected_folder:
         return None
 

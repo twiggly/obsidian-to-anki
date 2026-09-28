@@ -65,9 +65,22 @@ from .html_render import (
     render_inline_text,
 )
 from .models import ExportError, ExportOptions, MaskedText, NoteCard, ScanResult
-from .note_parser import extract_frontmatter_tags, extract_tags, parse_frontmatter_tag_value, split_frontmatter
-from .preview_render import html_to_preview_text, populate_preview_text_widget, preview_sections_for_card
-from .scan_filters import iter_markdown_note_paths, normalize_folder_filters, note_matches_folder_filters
+from .note_parser import (
+    extract_frontmatter_tags,
+    extract_tags,
+    parse_frontmatter_tag_value,
+    split_frontmatter,
+)
+from .preview_render import (
+    html_to_preview_text,
+    populate_preview_text_widget,
+    preview_sections_for_card,
+)
+from .scan_filters import (
+    iter_markdown_note_paths,
+    normalize_folder_filters,
+    note_matches_folder_filters,
+)
 from .scanner_engine import build_duplicate_summary, iter_cards, scan_cards
 
 __all__ = [

@@ -2,7 +2,11 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from obsidian_to_anki.anki.catalog import fetch_anki_catalog, fetch_note_type_fields, validate_anki_target
+from obsidian_to_anki.anki.catalog import (
+    fetch_anki_catalog,
+    fetch_note_type_fields,
+    validate_anki_target,
+)
 from obsidian_to_anki.anki.connect_client import AnkiConnectError
 from obsidian_to_anki.models import ExportOptions
 

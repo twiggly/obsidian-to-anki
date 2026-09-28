@@ -1,7 +1,13 @@
 import unittest
 from pathlib import Path
 
-from obsidian_to_anki.models import AnkiSyncResult, DeliveryResult, ExportOptions, NoteCard, ScanResult
+from obsidian_to_anki.models import (
+    AnkiSyncResult,
+    DeliveryResult,
+    ExportOptions,
+    NoteCard,
+    ScanResult,
+)
 from obsidian_to_anki.reporting import attach_delivery_report, build_delivery_report
 
 

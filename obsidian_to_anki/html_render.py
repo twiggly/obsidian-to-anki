@@ -3,7 +3,7 @@ from __future__ import annotations
 import html
 import re
 import uuid
-from typing import Sequence
+from collections.abc import Sequence
 
 from .common import (
     BOLD_PATTERN,
@@ -145,7 +145,9 @@ def render_block_segments(
         if match:
             flush_text_lines()
             list_items.append(
-                render_inline_text(match.group(1).strip(), italicize_quoted_text=italicize_quoted_text)
+                render_inline_text(
+                    match.group(1).strip(), italicize_quoted_text=italicize_quoted_text
+                )
             )
         else:
             flush_list_items()
@@ -171,17 +173,21 @@ def dictionary_entry_ranges(lines: Sequence[str]) -> list[tuple[int, int]] | Non
         entry_boundaries.append(index)
 
     entry_boundaries.append(len(lines))
-    return list(zip(entry_boundaries, entry_boundaries[1:]))
+    return list(zip(entry_boundaries, entry_boundaries[1:], strict=False))
 
 
-def render_dictionary_entries(lines: Sequence[str], italicize_quoted_text: bool = False) -> list[str] | None:
+def render_dictionary_entries(
+    lines: Sequence[str], italicize_quoted_text: bool = False
+) -> list[str] | None:
     entry_ranges = dictionary_entry_ranges(lines)
     if entry_ranges is None:
         return None
 
     entries: list[str] = []
     for start, end in entry_ranges:
-        entry_html = render_dictionary_entry(lines[start:end], italicize_quoted_text=italicize_quoted_text)
+        entry_html = render_dictionary_entry(
+            lines[start:end], italicize_quoted_text=italicize_quoted_text
+        )
         if entry_html is None:
             return None
         entries.append(entry_html)
@@ -189,7 +195,9 @@ def render_dictionary_entries(lines: Sequence[str], italicize_quoted_text: bool 
     return entries
 
 
-def render_dictionary_entry(lines: Sequence[str], italicize_quoted_text: bool = False) -> str | None:
+def render_dictionary_entry(
+    lines: Sequence[str], italicize_quoted_text: bool = False
+) -> str | None:
     if len(lines) < 2:
         return None
 

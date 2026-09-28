@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
-
 
 DEFAULT_GUI_SETTINGS_PATH = Path.home() / ".obsidian-to-anki-gui.json"
 GUI_SETTINGS_KEYS = {

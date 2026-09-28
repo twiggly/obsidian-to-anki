@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
-from typing import Any, Callable
+from typing import Any
 
+from ..models import AnkiDeckSettingsResult
 from .connect_client import AnkiConnectError, invoke_anki_connect, unexpected_anki_response_message
 from .note_types import OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME
-from ..models import AnkiDeckSettingsResult
-
 
 RECOMMENDED_DECK_NEW_CARDS_PER_DAY = 10
 RECOMMENDED_DECK_MAX_REVIEWS_PER_DAY = 200
@@ -54,7 +54,9 @@ def _apply_recommended_settings(config: dict[str, Any]) -> None:
     new_config["delays"] = list(RECOMMENDED_DECK_LEARNING_STEPS)
 
     existing_intervals = new_config.get("ints")
-    if isinstance(existing_intervals, list) and all(isinstance(item, int) for item in existing_intervals):
+    if isinstance(existing_intervals, list) and all(
+        isinstance(item, int) for item in existing_intervals
+    ):
         updated_intervals = list(existing_intervals)
         if not updated_intervals:
             updated_intervals = [1, 4]
@@ -71,6 +73,7 @@ def _apply_recommended_settings(config: dict[str, Any]) -> None:
     rev_config["perDay"] = RECOMMENDED_DECK_MAX_REVIEWS_PER_DAY
 
     lapse_config["delays"] = list(RECOMMENDED_DECK_RELEARNING_STEPS)
+
 
 def apply_recommended_deck_settings(
     anki_connect_url: str,

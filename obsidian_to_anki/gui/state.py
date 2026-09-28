@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 from ..common import duplicate_handling_display_label, normalize_duplicate_handling
 
@@ -115,9 +115,7 @@ def apply_saved_settings(
     app.anki_front_field_var.set(
         str(settings.get("anki_front_field", app.anki_front_field_var.get()))
     )
-    app.anki_back_field_var.set(
-        str(settings.get("anki_back_field", app.anki_back_field_var.get()))
-    )
+    app.anki_back_field_var.set(str(settings.get("anki_back_field", app.anki_back_field_var.get())))
     app.anki_existing_notes_var.set(
         str(settings.get("anki_existing_notes", app.anki_existing_notes_var.get()))
     )

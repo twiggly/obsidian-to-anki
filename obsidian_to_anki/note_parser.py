@@ -22,7 +22,7 @@ def split_frontmatter(text: str) -> tuple[str, str]:
     match = FRONTMATTER_PATTERN.match(normalized)
     if not match:
         return "", normalized
-    return match.group(1), normalized[match.end():]
+    return match.group(1), normalized[match.end() :]
 
 
 def extract_tags(frontmatter: str, body: str) -> set[str]:

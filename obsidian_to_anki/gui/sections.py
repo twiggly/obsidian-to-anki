@@ -67,8 +67,7 @@ def build_source_section(app: object, parent: object) -> object:
     tag_label.grid(row=2, column=0, sticky="w", pady=(4, 0))
     attach_tooltip(
         tag_label,
-        "Select one or more tags to scan for. "
-        "A note is included if it matches any selected tag.",
+        "Select one or more tags to scan for. A note is included if it matches any selected tag.",
     )
     tag_picker_frame = ttk.Frame(source)
     tag_picker_frame.grid(row=2, column=1, sticky="ew", padx=(10, 10), pady=(4, 0))
@@ -209,8 +208,7 @@ def build_anki_section(app: object, parent: object) -> object:
     deck_label.grid(row=1, column=0, sticky="w", pady=(4, 0))
     attach_tooltip(
         deck_label,
-        "The Anki deck where cards will be added or updated. "
-        "This deck must already exist in Anki.",
+        "The Anki deck where cards will be added or updated. This deck must already exist in Anki.",
     )
     app.anki_deck_combobox = ttk.Combobox(
         anki_options,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 
 def set_anki_connection_status(app: object, status: str) -> None:
@@ -134,7 +134,11 @@ def refresh_anki_connection(
     show_error_dialog: bool = True,
     quiet: bool = False,
 ) -> None:
-    if app.is_busy or app._anki_catalog_loading or getattr(app, "_anki_connection_check_loading", False):
+    if (
+        app.is_busy
+        or app._anki_catalog_loading
+        or getattr(app, "_anki_connection_check_loading", False)
+    ):
         return
 
     try:
@@ -225,9 +229,7 @@ def finish_anki_catalog_refresh_success(
         app.anki_note_type_var.get(),
     )
     app.set_anki_connection_status("connected")
-    loaded_message = (
-        f"Loaded {len(catalog.deck_names)} decks and {len(catalog.note_type_names)} note types from AnkiConnect."
-    )
+    loaded_message = f"Loaded {len(catalog.deck_names)} decks and {len(catalog.note_type_names)} note types from AnkiConnect."
     if not quiet:
         app.status_var.set(loaded_message)
         app.log(loaded_message)
@@ -315,9 +317,7 @@ def finish_anki_field_refresh_success(
         app.anki_front_field_var.get(),
         app.anki_back_field_var.get(),
     )
-    loaded_message = (
-        f"Loaded {len(field_catalog.field_names)} fields for note type '{field_catalog.note_type_name}'."
-    )
+    loaded_message = f"Loaded {len(field_catalog.field_names)} fields for note type '{field_catalog.note_type_name}'."
     app.status_var.set(loaded_message)
     app.log(loaded_message)
 

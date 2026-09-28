@@ -6,16 +6,22 @@ from obsidian_to_anki.gui.logic import (
     FormValidationError,
     build_export_options_from_values,
     delivery_action_label,
-    duplicate_front_warning_message,
     delivery_complete_message,
     delivery_complete_title,
     delivery_progress_message,
+    duplicate_front_warning_message,
     export_no_cards_message,
     preview_no_matches_message,
     preview_ready_message,
     timing_breakdown_lines,
 )
-from obsidian_to_anki.models import AnkiSyncResult, DeliveryResult, ExportOptions, NoteCard, ScanResult
+from obsidian_to_anki.models import (
+    AnkiSyncResult,
+    DeliveryResult,
+    ExportOptions,
+    NoteCard,
+    ScanResult,
+)
 
 
 def build_scan_result(
@@ -333,7 +339,9 @@ class GuiLogicTests(unittest.TestCase):
         self.assertIsNotNone(message)
         self.assertIn("1 duplicate front found.", message or "")
         self.assertIn("These fronts appear in more than one note.", message or "")
-        self.assertIn("Current handling: keep the first matching note and ignore the rest.", message or "")
+        self.assertIn(
+            "Current handling: keep the first matching note and ignore the rest.", message or ""
+        )
         self.assertIn("• Definition (2 matches)\n  Found in: Lexicon, Study", message or "")
         self.assertNotIn("Will become:", message or "")
         self.assertNotIn(str(Path(temp_dir)), message or "")
@@ -484,7 +492,9 @@ class GuiLogicTests(unittest.TestCase):
             "Exported 3 cards to: /tmp/out.tsv",
         )
 
-    def test_build_export_options_from_values_requires_output_path_when_tsv_is_enabled(self) -> None:
+    def test_build_export_options_from_values_requires_output_path_when_tsv_is_enabled(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             vault_path = Path(temp_dir) / "vault"
             vault_path.mkdir()
@@ -550,11 +560,11 @@ class GuiLogicTests(unittest.TestCase):
                     duplicate_handling="error",
                     sync_to_anki=True,
                     anki_connect_url="http://127.0.0.1:8765",
-                anki_deck="",
-                anki_note_type="Basic",
-                anki_front_field="Front",
-                anki_back_field="Back",
-                write_tsv=False,
+                    anki_deck="",
+                    anki_note_type="Basic",
+                    anki_front_field="Front",
+                    anki_back_field="Back",
+                    write_tsv=False,
                 )
 
         self.assertEqual(context.exception.title, "Missing Anki deck")

@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
+from ..models import AnkiCatalog, AnkiFieldCatalog, ExportOptions
 from .connect_client import (
     ANKI_CONNECT_API_VERSION,
     AnkiConnectError,
     invoke_anki_connect,
     unexpected_anki_response_message,
 )
-from ..models import AnkiCatalog, AnkiFieldCatalog, ExportOptions
 
 
 def check_anki_connection(
@@ -37,7 +38,9 @@ def fetch_anki_catalog(
     note_type_names = invoke_anki_connect_fn(anki_connect_url, "modelNames", None)
     if not isinstance(deck_names, list) or not all(isinstance(name, str) for name in deck_names):
         raise AnkiConnectError(unexpected_anki_response_message("deckNames"))
-    if not isinstance(note_type_names, list) or not all(isinstance(name, str) for name in note_type_names):
+    if not isinstance(note_type_names, list) or not all(
+        isinstance(name, str) for name in note_type_names
+    ):
         raise AnkiConnectError(unexpected_anki_response_message("modelNames"))
 
     return AnkiCatalog(

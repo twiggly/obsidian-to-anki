@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
-from .connect_client import AnkiConnectError, invoke_anki_connect, unexpected_anki_response_message
 from ..models import AnkiNoteTypeInstallResult
-
+from .connect_client import AnkiConnectError, invoke_anki_connect, unexpected_anki_response_message
 
 OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME = "Term & Definition (Obsidian)"
 OBSIDIAN_DEFINITIONS_MIN_VERSION = 6
@@ -168,7 +168,9 @@ def install_obsidian_definitions_note_type(
         ),
         "modelFieldNames",
     )
-    missing_fields = [field for field in OBSIDIAN_DEFINITIONS_FIELD_NAMES if field not in field_names]
+    missing_fields = [
+        field for field in OBSIDIAN_DEFINITIONS_FIELD_NAMES if field not in field_names
+    ]
     if missing_fields:
         raise AnkiConnectError(
             f"The existing Anki note type '{OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME}' doesn't use the required Front and Back fields. Rename or remove it in Anki, then try the installer again."

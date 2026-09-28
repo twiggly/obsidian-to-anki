@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import re
 import uuid
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from .models import ExportError, MaskedText
-
 
 INLINE_TAG_PATTERN = re.compile(r"(?<![\w/])#([A-Za-z0-9_\-/]+)")
 FRONTMATTER_PATTERN = re.compile(r"\A---\s*\n(.*?)\n---\s*(?:\n|\Z)", re.DOTALL)
@@ -18,7 +17,7 @@ OBSIDIAN_WIKILINK_TARGET_PATTERN = re.compile(r"(\[\[)([^\]\n]*)(\]\])")
 LIST_ITEM_PATTERN = re.compile(r"^\s*[-*]\s+(.*)$")
 BOLD_PATTERN = re.compile(r"\*\*(.+?)\*\*")
 ITALIC_PATTERN = re.compile(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)")
-QUOTED_ITALIC_PATTERN = re.compile(r'&quot;(.+?)&quot;|“(.+?)”')
+QUOTED_ITALIC_PATTERN = re.compile(r"&quot;(.+?)&quot;|“(.+?)”")
 TRAILING_PART_OF_SPEECH_QUALIFIER_PATTERN = re.compile(r"\s+\([^()]+\)\s*$")
 PREVIEW_CARD_LIMIT = 30
 DUPLICATE_SUMMARY_LIMIT = 8
@@ -111,8 +110,7 @@ def normalize_anki_existing_notes(strategy: str) -> str:
     normalized = strategy.strip().lower()
     if normalized not in ANKI_EXISTING_NOTE_CHOICES:
         raise ExportError(
-            "Anki existing-note handling must be one of: "
-            + ", ".join(ANKI_EXISTING_NOTE_CHOICES)
+            "Anki existing-note handling must be one of: " + ", ".join(ANKI_EXISTING_NOTE_CHOICES)
         )
     return normalized
 
@@ -129,10 +127,7 @@ def duplicate_handling_warning_message(strategy: str, duplicate_count: int) -> s
             "Appending folder-based suffixes so each front stays unique."
         )
     if strategy == "error":
-        return (
-            f"Detected {duplicate_count} duplicate card fronts. "
-            "Stopping before export or sync."
-        )
+        return f"Detected {duplicate_count} duplicate card fronts. Stopping before export or sync."
     return f"Detected {duplicate_count} duplicate card fronts."
 
 
@@ -157,7 +152,9 @@ def normalize_target_tags(raw_tags: str | Sequence[str]) -> tuple[str, ...]:
     return tuple(normalized_tags)
 
 
-def effective_target_tags(target_tag: str, additional_target_tags: Sequence[str] = ()) -> tuple[str, ...]:
+def effective_target_tags(
+    target_tag: str, additional_target_tags: Sequence[str] = ()
+) -> tuple[str, ...]:
     return normalize_target_tags((target_tag, *additional_target_tags))
 
 
@@ -305,7 +302,9 @@ def unmask_placeholders(
     return text
 
 
-def unmask_code_regions(masked: MaskedText | str, placeholders: list[str] | None = None, token: str | None = None) -> str:
+def unmask_code_regions(
+    masked: MaskedText | str, placeholders: list[str] | None = None, token: str | None = None
+) -> str:
     return unmask_placeholders(masked, "CODE", placeholders, token)
 
 

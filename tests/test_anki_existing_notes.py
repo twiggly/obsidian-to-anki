@@ -57,7 +57,9 @@ class AnkiExistingNotesTests(unittest.TestCase):
 
         self.assertEqual(sorted(existing.keys()), ["colloquy", "confab"])
         self.assertEqual(existing["confab"][0].note_id, 101)
-        self.assertEqual(existing["confab"][0].fields["Back"], "noun\nan informal private conversation")
+        self.assertEqual(
+            existing["confab"][0].fields["Back"], "noun\nan informal private conversation"
+        )
         self.assertEqual(existing["colloquy"][0].tags, frozenset({"definition", "lexicon"}))
 
     def test_build_existing_note_update_plan_detects_field_and_tag_changes(self) -> None:
@@ -107,7 +109,10 @@ class AnkiExistingNotesTests(unittest.TestCase):
             PendingExistingNoteUpdate(
                 note_id=102,
                 front_value="confab",
-                fields_to_update={"Front": "confab", "Back": "noun\nan informal private conversation"},
+                fields_to_update={
+                    "Front": "confab",
+                    "Back": "noun\nan informal private conversation",
+                },
                 tags_to_add=None,
             ),
         ]

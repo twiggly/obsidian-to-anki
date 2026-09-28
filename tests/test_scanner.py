@@ -56,7 +56,9 @@ class TagExtractionTests(unittest.TestCase):
 
         self.assertEqual(cleaned, "link")
 
-    def test_clean_body_flattens_obsidian_wikilink_heading_fragments_while_removing_actual_tags(self) -> None:
+    def test_clean_body_flattens_obsidian_wikilink_heading_fragments_while_removing_actual_tags(
+        self,
+    ) -> None:
         cleaned = clean_body("[[#definition|label]]\n\n#definition")
 
         self.assertEqual(cleaned, "label")
@@ -93,7 +95,9 @@ class ValidationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             vault_path = Path(temp_dir)
             (vault_path / "A.md").write_text("#definition\n#Biology", encoding="utf-8")
-            (vault_path / "B.md").write_text("---\ntags: lexicon, study\n---\nBody", encoding="utf-8")
+            (vault_path / "B.md").write_text(
+                "---\ntags: lexicon, study\n---\nBody", encoding="utf-8"
+            )
 
             tags = scan_vault_tags(vault_path)
 
@@ -203,7 +207,9 @@ class ValidationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             vault_path = Path(temp_dir)
             (vault_path / ".trash").mkdir()
-            (vault_path / ".trash" / "Deleted.md").write_text("#definition\nOld body", encoding="utf-8")
+            (vault_path / ".trash" / "Deleted.md").write_text(
+                "#definition\nOld body", encoding="utf-8"
+            )
             (vault_path / ".Hidden.md").write_text("#definition\nHidden body", encoding="utf-8")
             (vault_path / "Visible.md").write_text("#definition\nVisible body", encoding="utf-8")
 
@@ -240,7 +246,9 @@ class ValidationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             vault_path = Path(temp_dir)
             (vault_path / ".trash").mkdir()
-            (vault_path / ".trash" / "Deleted.md").write_text("#definition\nOld body", encoding="utf-8")
+            (vault_path / ".trash" / "Deleted.md").write_text(
+                "#definition\nOld body", encoding="utf-8"
+            )
             (vault_path / "Definition.md").write_text("#definition\nA body", encoding="utf-8")
             options = ExportOptions(vault_path=vault_path, output_path=vault_path / "out.tsv")
 

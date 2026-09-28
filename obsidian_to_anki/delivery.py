@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from time import perf_counter
-from typing import Callable, Sequence
 
 from .anki.sync import sync_cards_to_anki
 from .exporting import run_export
@@ -12,7 +12,9 @@ def deliver_cards(
     options: ExportOptions,
     cards: Sequence[NoteCard],
     export_fn: Callable[[ExportOptions, Sequence[NoteCard]], int] = run_export,
-    sync_fn: Callable[[ExportOptions, Sequence[NoteCard], AnkiPreflightResult | None], AnkiSyncResult] = sync_cards_to_anki,
+    sync_fn: Callable[
+        [ExportOptions, Sequence[NoteCard], AnkiPreflightResult | None], AnkiSyncResult
+    ] = sync_cards_to_anki,
     anki_preflight_result: AnkiPreflightResult | None = None,
 ) -> DeliveryResult:
     if not cards:

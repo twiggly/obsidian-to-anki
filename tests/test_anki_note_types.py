@@ -48,7 +48,9 @@ class AnkiNoteTypeInstallerTests(unittest.TestCase):
         self.assertEqual(invoke.call_args_list[5].args[1], "updateModelTemplates")
         self.assertEqual(invoke.call_args_list[6].args[1], "updateModelStyling")
 
-    def test_install_obsidian_definitions_note_type_rejects_conflicting_existing_fields(self) -> None:
+    def test_install_obsidian_definitions_note_type_rejects_conflicting_existing_fields(
+        self,
+    ) -> None:
         invoke = mock.Mock(
             side_effect=[
                 6,

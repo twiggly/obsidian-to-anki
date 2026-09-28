@@ -38,7 +38,9 @@ def preview_sections_for_card(card: NoteCard, html_output: bool = False) -> list
     return sections
 
 
-def populate_preview_text_widget(widget: tk.Text, card: NoteCard, html_output: bool = False) -> None:
+def populate_preview_text_widget(
+    widget: tk.Text, card: NoteCard, html_output: bool = False
+) -> None:
     widget.configure(state="normal")
     widget.delete("1.0", "end")
     widget.tag_configure("label", font=("TkDefaultFont", 10, "bold"))
