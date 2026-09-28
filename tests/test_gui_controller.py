@@ -3,16 +3,16 @@ from pathlib import Path
 from unittest import mock
 
 from obsidian_to_anki.anki.sync import OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME
-from obsidian_to_anki.gui import app as gui
 from obsidian_to_anki.gui import ExporterApp
+from obsidian_to_anki.gui import app as gui
 from obsidian_to_anki.gui.logic import FormValidationError
 from obsidian_to_anki.models import (
     AnkiCatalog,
     AnkiDeckSettingsResult,
+    AnkiFieldCatalog,
     AnkiNoteTypeInstallResult,
     AnkiPreflightResult,
     AnkiPreflightSummary,
-    AnkiFieldCatalog,
     AnkiSyncResult,
     DeliveryResult,
     ExportOptions,
@@ -191,7 +191,9 @@ class GuiControllerTests(unittest.TestCase):
 
         self.assertTrue(app.is_busy)
         self.assertEqual(app.status_var.get(), "Scanning vault for tags…")
-        self.assertEqual(app.log.call_args_list[0].args[0], "Scanning vault to find available tags.")
+        self.assertEqual(
+            app.log.call_args_list[0].args[0], "Scanning vault to find available tags."
+        )
         args = start_tag_catalog_scan.call_args.args
         self.assertEqual(args[1], Path("/tmp/vault"))
         self.assertEqual(args[2], ())
@@ -269,7 +271,9 @@ class GuiControllerTests(unittest.TestCase):
         app = build_controller()
         app.write_tsv_var = FakeVar(False)
 
-        with mock.patch.object(gui, "build_export_options_from_values", return_value=mock.Mock()) as builder:
+        with mock.patch.object(
+            gui, "build_export_options_from_values", return_value=mock.Mock()
+        ) as builder:
             ExporterApp.build_options_from_form(app)
 
         self.assertEqual(builder.call_args.kwargs["write_tsv"], False)
@@ -279,7 +283,9 @@ class GuiControllerTests(unittest.TestCase):
         app = build_controller()
         app.flatten_note_links_var = FakeVar(False)
 
-        with mock.patch.object(gui, "build_export_options_from_values", return_value=mock.Mock()) as builder:
+        with mock.patch.object(
+            gui, "build_export_options_from_values", return_value=mock.Mock()
+        ) as builder:
             ExporterApp.build_options_from_form(app)
 
         self.assertEqual(builder.call_args.kwargs["flatten_note_links"], False)
@@ -431,7 +437,9 @@ class GuiControllerTests(unittest.TestCase):
             mock.patch.object(
                 gui,
                 "build_export_options_from_values",
-                side_effect=FormValidationError("Missing vault", "Choose an Obsidian vault folder."),
+                side_effect=FormValidationError(
+                    "Missing vault", "Choose an Obsidian vault folder."
+                ),
             ),
             mock.patch.object(gui, "messagebox", mock.Mock()) as messagebox_mock,
         ):
@@ -513,7 +521,9 @@ class GuiControllerTests(unittest.TestCase):
                 preflight_result,
             )
 
-        self.assertEqual(show_preview_dialog.call_args.kwargs["anki_preflight_summary"], preflight_summary)
+        self.assertEqual(
+            show_preview_dialog.call_args.kwargs["anki_preflight_summary"], preflight_summary
+        )
         callback = show_preview_dialog.call_args.kwargs["on_confirm"]
         callback()
         app.begin_delivery.assert_called_once_with(options, scan_result, preflight_result)
@@ -582,7 +592,9 @@ class GuiControllerTests(unittest.TestCase):
             ExporterApp.install_obsidian_definitions_note_type(app)
 
         self.assertTrue(app.is_busy)
-        self.assertEqual(app.status_var.get(), "Installing the Term & Definition (Obsidian) note type…")
+        self.assertEqual(
+            app.status_var.get(), "Installing the Term & Definition (Obsidian) note type…"
+        )
         self.assertEqual(
             app.log.call_args_list[0].args[0],
             "Installing or updating the Term & Definition (Obsidian) note type in Anki.",
@@ -599,14 +611,18 @@ class GuiControllerTests(unittest.TestCase):
         app = build_controller()
 
         with (
-            mock.patch.object(gui, "start_anki_deck_settings_update") as start_anki_deck_settings_update,
+            mock.patch.object(
+                gui, "start_anki_deck_settings_update"
+            ) as start_anki_deck_settings_update,
             mock.patch.object(gui, "messagebox", mock.Mock()) as messagebox_mock,
         ):
             messagebox_mock.askyesno.return_value = True
             ExporterApp.apply_recommended_deck_settings(app)
 
         self.assertTrue(app.is_busy)
-        self.assertEqual(app.status_var.get(), "Applying the recommended deck settings to 'Default'…")
+        self.assertEqual(
+            app.status_var.get(), "Applying the recommended deck settings to 'Default'…"
+        )
         self.assertEqual(
             app.log.call_args_list[0].args[0],
             "Applying the recommended deck settings to 'Default' in Anki.",
@@ -625,7 +641,9 @@ class GuiControllerTests(unittest.TestCase):
         app = build_controller()
 
         with (
-            mock.patch.object(gui, "start_anki_deck_settings_update") as start_anki_deck_settings_update,
+            mock.patch.object(
+                gui, "start_anki_deck_settings_update"
+            ) as start_anki_deck_settings_update,
             mock.patch.object(gui, "messagebox", mock.Mock()) as messagebox_mock,
         ):
             messagebox_mock.askyesno.return_value = False
@@ -768,7 +786,9 @@ class GuiControllerTests(unittest.TestCase):
             note_type_names=("Basic", "Cloze"),
         )
 
-        with mock.patch.object(gui.ExporterApp, "refresh_anki_fields_if_needed") as refresh_anki_fields_if_needed:
+        with mock.patch.object(
+            gui.ExporterApp, "refresh_anki_fields_if_needed"
+        ) as refresh_anki_fields_if_needed:
             ExporterApp.finish_anki_catalog_refresh_success(app, catalog)
 
         self.assertEqual(app.anki_deck_combobox.values, ("Default", "Obsidian"))
@@ -788,7 +808,9 @@ class GuiControllerTests(unittest.TestCase):
             note_type_names=("Basic", "Cloze"),
         )
 
-        with mock.patch.object(gui.ExporterApp, "refresh_anki_fields_if_needed") as refresh_anki_fields_if_needed:
+        with mock.patch.object(
+            gui.ExporterApp, "refresh_anki_fields_if_needed"
+        ) as refresh_anki_fields_if_needed:
             ExporterApp.finish_anki_catalog_refresh_success(app, catalog, quiet=True)
 
         self.assertEqual(app.status_var.get(), "Existing status")
@@ -812,7 +834,9 @@ class GuiControllerTests(unittest.TestCase):
         self.assertIsNone(app._last_loaded_anki_note_type)
         messagebox_mock.showerror.assert_not_called()
 
-    def test_finish_anki_connection_check_success_triggers_quiet_catalog_refresh_when_catalog_is_stale(self) -> None:
+    def test_finish_anki_connection_check_success_triggers_quiet_catalog_refresh_when_catalog_is_stale(
+        self,
+    ) -> None:
         app = build_controller()
         app._last_loaded_anki_url = None
         app.refresh_anki_catalog = mock.Mock()
@@ -841,7 +865,9 @@ class GuiControllerTests(unittest.TestCase):
     def test_finish_anki_field_refresh_success_populates_field_comboboxes(self) -> None:
         app = build_controller()
         app._pending_anki_field_key = ("http://127.0.0.1:8765", "Basic")
-        field_catalog = AnkiFieldCatalog(note_type_name="Basic", field_names=("Front", "Back", "Tags"))
+        field_catalog = AnkiFieldCatalog(
+            note_type_name="Basic", field_names=("Front", "Back", "Tags")
+        )
 
         ExporterApp.finish_anki_field_refresh_success(app, field_catalog)
 
@@ -853,7 +879,9 @@ class GuiControllerTests(unittest.TestCase):
         app = build_controller()
         app.sync_to_anki_var = FakeVar(True)
         app.is_busy = True
-        result = AnkiNoteTypeInstallResult(note_type_name="Term & Definition (Obsidian)", created=True)
+        result = AnkiNoteTypeInstallResult(
+            note_type_name="Term & Definition (Obsidian)", created=True
+        )
 
         with mock.patch.object(gui, "messagebox", mock.Mock()) as messagebox_mock:
             ExporterApp.finish_anki_note_type_install_success(app, result)
@@ -880,7 +908,9 @@ class GuiControllerTests(unittest.TestCase):
         self.assertFalse(app.is_busy)
         self.assertEqual(app.status_var.get(), "Install failed")
         self.assertEqual(app.log.call_args_list[-1].args[0], "Error: Install failed")
-        messagebox_mock.showerror.assert_called_once_with("Note type install failed", "Install failed")
+        messagebox_mock.showerror.assert_called_once_with(
+            "Note type install failed", "Install failed"
+        )
 
     def test_finish_anki_deck_settings_success_shows_message(self) -> None:
         app = build_controller()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable, Sequence
+from collections.abc import Callable, Sequence
 
 from .state import sanitize_string_values
 
@@ -62,7 +62,9 @@ def remove_tag(app: object, tag: str) -> None:
 
 def add_folder_filter(
     app: object,
-    add_folder_filter_from_dialog: Callable[[str, Sequence[str], Callable[[str], None]], list[str] | None],
+    add_folder_filter_from_dialog: Callable[
+        [str, Sequence[str], Callable[[str], None]], list[str] | None
+    ],
 ) -> None:
     updated_values = add_folder_filter_from_dialog(
         app.vault_var.get(),

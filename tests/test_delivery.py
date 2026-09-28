@@ -28,12 +28,14 @@ class DeliveryTests(unittest.TestCase):
             options,
             cards,
             export_fn=lambda received_options, received_cards: calls.append("export") or 1,
-            sync_fn=lambda received_options, received_cards, anki_preflight_result=None: calls.append("sync")
-            or AnkiSyncResult(
-                added_count=1,
-                skipped_count=0,
-                deck_name="Lexicon",
-                note_type="Basic",
+            sync_fn=lambda received_options, received_cards, anki_preflight_result=None: (
+                calls.append("sync")
+                or AnkiSyncResult(
+                    added_count=1,
+                    skipped_count=0,
+                    deck_name="Lexicon",
+                    note_type="Basic",
+                )
             ),
         )
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, Sequence
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import tkinter as tk
@@ -179,7 +180,7 @@ class HoverTooltip:
 
 def attach_tooltip(widget: object, text: str) -> HoverTooltip:
     tooltip = HoverTooltip(widget, text)
-    setattr(widget, "_hover_tooltip", tooltip)
+    widget._hover_tooltip = tooltip
     return tooltip
 
 
@@ -216,7 +217,7 @@ def bind_chip_container_resize(container: object) -> None:
         if event_width == getattr(container, "_chip_last_width", None):
             return
 
-        setattr(container, "_chip_last_width", event_width)
+        container._chip_last_width = event_width
         render_tag_chips(
             container,
             state["values"],
@@ -227,7 +228,7 @@ def bind_chip_container_resize(container: object) -> None:
 
     try:
         container.bind("<Configure>", rerender, add="+")
-        setattr(container, "_chip_resize_bound", True)
+        container._chip_resize_bound = True
     except Exception:
         pass
 
@@ -244,20 +245,16 @@ def render_tag_chips(
         raise RuntimeError("Tkinter is not available in this Python installation.")
 
     bind_chip_container_resize(container)
-    setattr(
-        container,
-        "_chip_render_state",
-        {
-            "values": tuple(values),
-            "on_remove": on_remove,
-            "disabled": disabled,
-            "empty_text": empty_text,
-        },
-    )
-    setattr(container, "_chip_render_in_progress", True)
+    container._chip_render_state = {
+        "values": tuple(values),
+        "on_remove": on_remove,
+        "disabled": disabled,
+        "empty_text": empty_text,
+    }
+    container._chip_render_in_progress = True
     existing_children = container.winfo_children()
     if not isinstance(existing_children, (list, tuple)):
-        setattr(container, "_chip_render_in_progress", False)
+        container._chip_render_in_progress = False
         return []
 
     try:
@@ -356,11 +353,13 @@ def render_tag_chips(
 
         return remove_buttons
     finally:
-        setattr(container, "_chip_last_width", measure_container_width(container))
-        setattr(container, "_chip_render_in_progress", False)
+        container._chip_last_width = measure_container_width(container)
+        container._chip_render_in_progress = False
 
 
-def build_status_section(app: object, parent: object, *, row: int, log_font: object | None) -> object:
+def build_status_section(
+    app: object, parent: object, *, row: int, log_font: object | None
+) -> object:
     if tk is None or ttk is None:
         raise RuntimeError("Tkinter is not available in this Python installation.")
 

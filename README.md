@@ -244,7 +244,7 @@ Key modules inside `obsidian_to_anki/`:
 - `preview_render.py`: preview text conversion and preview widget population
 - `gui/`: GUI controller, view, widget, task, and settings modules
 - `gui_*.py`: compatibility facades for the `gui/` subpackage
-- `reporting.py`: post-run duplicate and sync reporting
+- `reporting.py`: shared completion messages, timings, and post-run duplicate and sync reporting
 
 The test suite now lives in the `tests/` package.
 
@@ -261,6 +261,29 @@ or:
 ```bash
 python3 -m unittest discover -s tests -v
 ```
+
+## Development Checks
+
+Install the optional development tools in a virtual environment:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -e '.[dev]'
+```
+
+Run all checks before submitting changes:
+
+```bash
+make check
+```
+
+This runs Ruff lint checks, verifies formatting, and runs the unit tests. Ruff targets
+Python 3.10 and formats to a 100-character line length. Use `make lint` or
+`make format-check` for individual checks, and `make format` to apply formatting.
+The app and `make test` do not require Ruff.
+
+Without activating the environment, use `make check PYTHON=.venv/bin/python`.
 
 ## Branch and PR Workflow
 

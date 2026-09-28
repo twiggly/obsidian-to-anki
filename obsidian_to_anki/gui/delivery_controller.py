@@ -1,9 +1,15 @@
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from ..anki.sync import OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME
-from ..models import AnkiPreflightResult, AnkiPreflightSummary, DeliveryResult, ExportOptions, ScanResult
+from ..models import (
+    AnkiPreflightResult,
+    AnkiPreflightSummary,
+    DeliveryResult,
+    ExportOptions,
+    ScanResult,
+)
 
 
 def set_busy(app: object, busy: bool) -> None:
@@ -100,12 +106,14 @@ def start_preview(
     start_preview_scan(
         app.root,
         preview_options,
-        lambda _completed_options, scan_result, preflight_summary, preflight_error, preflight_result: app.finish_preview_success(
-            options,
-            scan_result,
-            preflight_summary,
-            preflight_error,
-            preflight_result,
+        lambda _completed_options, scan_result, preflight_summary, preflight_error, preflight_result: (
+            app.finish_preview_success(
+                options,
+                scan_result,
+                preflight_summary,
+                preflight_error,
+                preflight_result,
+            )
         ),
         app.finish_preview_error,
     )
@@ -154,7 +162,9 @@ def finish_preview_success(
         app.log(f"Detected {duplicate_count} duplicate fronts.")
         messagebox_module.showwarning("Duplicate fronts detected", warning_message)
         if options.duplicate_handling == "error":
-            stop_message = "Duplicate fronts detected. Resolve them or choose skip or suffix to continue."
+            stop_message = (
+                "Duplicate fronts detected. Resolve them or choose skip or suffix to continue."
+            )
             app.status_var.set(stop_message)
             app.log(stop_message)
             return

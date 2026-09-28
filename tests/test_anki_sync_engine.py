@@ -1,16 +1,26 @@
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
-from obsidian_to_anki.anki.connect_client import AnkiConnectError
-from obsidian_to_anki.anki.existing_notes import ExistingAnkiNote, build_existing_note_snapshot, build_existing_note_update_plan
+from obsidian_to_anki.anki.connect_client import AnkiConnectError, is_duplicate_note_error
+from obsidian_to_anki.anki.existing_notes import (
+    ExistingAnkiNote,
+    build_existing_note_snapshot,
+    build_existing_note_update_plan,
+)
 from obsidian_to_anki.anki.sync_engine import (
     build_anki_notes,
     build_anki_preflight_result,
     build_anki_preflight_summary,
     sync_cards_to_anki,
 )
-from obsidian_to_anki.models import AnkiPreflightResult, ExportOptions, NoteCard
+from obsidian_to_anki.models import (
+    AnkiPreflightResult,
+    AnkiPreflightSummary,
+    ExportOptions,
+    NoteCard,
+)
 
 
 def build_cards() -> list[NoteCard]:
@@ -44,6 +54,192 @@ def build_options(existing_notes: str = "skip") -> ExportOptions:
 
 
 class AnkiSyncEngineTests(unittest.TestCase):
+    def sync_dependencies(self) -> dict:
+        return {
+            "validate_anki_target_fn": mock.Mock(),
+            "build_anki_notes_fn": mock.Mock(wraps=build_anki_notes),
+            "fetch_existing_notes_by_front_fn": mock.Mock(return_value={}),
+            "invoke_anki_connect_fn": mock.Mock(return_value=[True, True]),
+            "note_front_value_fn": lambda note, name: note["fields"][name],
+            "build_existing_note_update_plan_fn": build_existing_note_update_plan,
+            "apply_existing_note_updates_fn": mock.Mock(),
+            "add_notes_batch_fn": mock.Mock(return_value=[111, 222]),
+            "add_single_note_fn": mock.Mock(return_value=333),
+            "is_duplicate_note_error_fn": is_duplicate_note_error,
+            "build_existing_note_snapshot_fn": mock.Mock(wraps=build_existing_note_snapshot),
+        }
+
+    def assert_no_writes(self, dependencies: dict) -> None:
+        for name in ("apply_existing_note_updates_fn", "add_notes_batch_fn", "add_single_note_fn"):
+            dependencies[name].assert_not_called()
+
+    def test_invalid_can_add_responses_stop_preflight_and_sync(self) -> None:
+        for response in ([], [True], [True, False, True], [True, 1], [None, False], {}, None):
+            for operation in ("preflight", "sync"):
+                with self.subTest(response=response, operation=operation):
+                    dependencies = self.sync_dependencies()
+                    dependencies["invoke_anki_connect_fn"].return_value = response
+                    with self.assertRaisesRegex(AnkiConnectError, "'canAddNotes'"):
+                        if operation == "sync":
+                            sync_cards_to_anki(
+                                build_options("update"), build_cards(), **dependencies
+                            )
+                        else:
+                            build_anki_preflight_result(
+                                build_options("update"),
+                                build_cards(),
+                                **{
+                                    name: dependencies[name]
+                                    for name in (
+                                        "validate_anki_target_fn",
+                                        "build_anki_notes_fn",
+                                        "fetch_existing_notes_by_front_fn",
+                                        "invoke_anki_connect_fn",
+                                        "build_existing_note_update_plan_fn",
+                                    )
+                                },
+                            )
+                    self.assert_no_writes(dependencies)
+
+    def test_invalid_cached_preflight_stops_before_any_requests(self) -> None:
+        options = build_options("update")
+        cards = build_cards()
+        notes = tuple(build_anki_notes(options, cards))
+        for cached_notes, flags, input_cards in (
+            (notes[:1], (True, False), cards),
+            (notes, (True,), cards),
+            (notes, (True, False, True), cards),
+            (notes, (True, 1), cards),
+            (notes, (True, None), cards),
+            (notes, (True, False), []),
+        ):
+            with self.subTest(notes=len(cached_notes), flags=flags, cards=len(input_cards)):
+                dependencies = self.sync_dependencies()
+                cached = AnkiPreflightResult(
+                    summary=AnkiPreflightSummary(2, 0, 0, "Lexicon", "Basic"),
+                    notes=cached_notes,
+                    can_add=flags,
+                )
+                with self.assertRaisesRegex(AnkiConnectError, "Preview cards again"):
+                    sync_cards_to_anki(
+                        options, input_cards, preflight_result=cached, **dependencies
+                    )
+                self.assert_no_writes(dependencies)
+                for name in (
+                    "validate_anki_target_fn",
+                    "build_anki_notes_fn",
+                    "fetch_existing_notes_by_front_fn",
+                    "invoke_anki_connect_fn",
+                ):
+                    dependencies[name].assert_not_called()
+
+    def test_mixed_sync_preserves_request_order_and_fronts(self) -> None:
+        dependencies = self.sync_dependencies()
+        cards = [*build_cards(), replace(build_cards()[0], front="elsewhere")]
+        dependencies["invoke_anki_connect_fn"].return_value = [True, False, False]
+        dependencies["fetch_existing_notes_by_front_fn"].return_value = {
+            "colloquy": [ExistingAnkiNote(101, {"Front": "colloquy", "Back": "old"}, frozenset())]
+        }
+        dependencies["add_notes_batch_fn"].return_value = [111]
+        calls = mock.Mock()
+        for name in (
+            "validate_anki_target_fn",
+            "fetch_existing_notes_by_front_fn",
+            "invoke_anki_connect_fn",
+            "apply_existing_note_updates_fn",
+            "add_notes_batch_fn",
+        ):
+            calls.attach_mock(dependencies[name], name)
+
+        result = sync_cards_to_anki(build_options("update"), cards, **dependencies)
+
+        self.assertEqual(
+            (result.added_count, result.updated_count, result.skipped_count), (1, 1, 1)
+        )
+        self.assertEqual(result.updated_fronts, ("colloquy",))
+        self.assertEqual(result.skipped_fronts, ("elsewhere",))
+        self.assertEqual(
+            [call[0] for call in calls.mock_calls],
+            [
+                "validate_anki_target_fn",
+                "fetch_existing_notes_by_front_fn",
+                "invoke_anki_connect_fn",
+                "apply_existing_note_updates_fn",
+                "add_notes_batch_fn",
+            ],
+        )
+
+    def test_duplicate_fallback_can_update_a_note_added_in_same_batch(self) -> None:
+        dependencies = self.sync_dependencies()
+        card = build_cards()[0]
+        cards = [card, replace(card, back="revised definition")]
+        dependencies["add_notes_batch_fn"].return_value = [111, None]
+        dependencies["add_single_note_fn"].side_effect = AnkiConnectError(
+            "cannot create note because it is a duplicate"
+        )
+
+        result = sync_cards_to_anki(build_options("update"), cards, **dependencies)
+
+        self.assertEqual(
+            (result.added_count, result.updated_count, result.skipped_count), (1, 1, 0)
+        )
+        self.assertEqual(result.updated_fronts, (card.front,))
+        update = dependencies["apply_existing_note_updates_fn"].call_args.args[1][0]
+        self.assertEqual(update.note_id, 111)
+        self.assertEqual(update.fields_to_update["Back"], "revised definition")
+
+    def test_single_add_fallback_records_successful_snapshot(self) -> None:
+        dependencies = self.sync_dependencies()
+        dependencies["add_notes_batch_fn"].return_value = [None, 222]
+
+        result = sync_cards_to_anki(build_options("update"), build_cards(), **dependencies)
+
+        self.assertEqual(result.added_count, 2)
+        self.assertEqual(result.skipped_count, 0)
+        self.assertEqual(
+            [
+                call.args[0]
+                for call in dependencies["build_existing_note_snapshot_fn"].call_args_list
+            ],
+            [333, 222],
+        )
+
+    def test_non_duplicate_write_errors_propagate(self) -> None:
+        for failing_step in ("batch", "single", "update"):
+            with self.subTest(failing_step=failing_step):
+                dependencies = self.sync_dependencies()
+                failure = AnkiConnectError("Deck unavailable", raw_error="deck not found")
+                if failing_step == "batch":
+                    dependencies["add_notes_batch_fn"].side_effect = failure
+                elif failing_step == "single":
+                    dependencies["add_notes_batch_fn"].return_value = [None, 222]
+                    dependencies["add_single_note_fn"].side_effect = failure
+                else:
+                    dependencies["invoke_anki_connect_fn"].return_value = [False, False]
+                    dependencies["fetch_existing_notes_by_front_fn"].return_value = {
+                        "colloquy": [
+                            ExistingAnkiNote(101, {"Front": "colloquy", "Back": "old"}, frozenset())
+                        ]
+                    }
+                    dependencies["apply_existing_note_updates_fn"].side_effect = failure
+
+                with self.assertRaises(AnkiConnectError) as raised:
+                    sync_cards_to_anki(build_options("update"), build_cards(), **dependencies)
+                self.assertIs(raised.exception, failure)
+                if failing_step == "batch":
+                    dependencies["add_single_note_fn"].assert_not_called()
+                if failing_step == "update":
+                    dependencies["add_notes_batch_fn"].assert_not_called()
+
+    def test_empty_sync_performs_no_work(self) -> None:
+        dependencies = self.sync_dependencies()
+        result = sync_cards_to_anki(build_options(), [], **dependencies)
+        self.assertEqual(
+            (result.added_count, result.updated_count, result.skipped_count), (0, 0, 0)
+        )
+        self.assert_no_writes(dependencies)
+        dependencies["validate_anki_target_fn"].assert_not_called()
+
     def test_build_anki_preflight_summary_counts_new_and_skipped_notes(self) -> None:
         summary = build_anki_preflight_summary(
             build_options(),
@@ -171,8 +367,9 @@ class AnkiSyncEngineTests(unittest.TestCase):
             apply_existing_note_updates_fn=mock.Mock(),
             add_notes_batch_fn=mock.Mock(return_value=[111, None]),
             add_single_note_fn=mock.Mock(side_effect=duplicate_error),
-            is_duplicate_note_error_fn=lambda error_value: "cannot create note because it is a duplicate"
-            in str(error_value).casefold(),
+            is_duplicate_note_error_fn=lambda error_value: (
+                "cannot create note because it is a duplicate" in str(error_value).casefold()
+            ),
             build_existing_note_snapshot_fn=build_existing_note_snapshot,
         )
 
@@ -203,13 +400,20 @@ class AnkiSyncEngineTests(unittest.TestCase):
             build_existing_note_update_plan_fn=build_existing_note_update_plan,
             apply_existing_note_updates_fn=mock.Mock(),
             add_notes_batch_fn=mock.Mock(side_effect=batch_duplicate_error),
-            add_single_note_fn=mock.Mock(side_effect=[single_duplicate_error, single_duplicate_error]),
+            add_single_note_fn=mock.Mock(
+                side_effect=[single_duplicate_error, single_duplicate_error]
+            ),
             is_duplicate_note_error_fn=lambda error_value: (
-                isinstance(error_value, list)
-                and error_value
-                and all("cannot create note because it is a duplicate" in str(item).casefold() for item in error_value)
-            )
-            or "cannot create note because it is a duplicate" in str(error_value).casefold(),
+                (
+                    isinstance(error_value, list)
+                    and error_value
+                    and all(
+                        "cannot create note because it is a duplicate" in str(item).casefold()
+                        for item in error_value
+                    )
+                )
+                or "cannot create note because it is a duplicate" in str(error_value).casefold()
+            ),
             build_existing_note_snapshot_fn=build_existing_note_snapshot,
         )
 
@@ -270,8 +474,7 @@ class AnkiSyncEngineTests(unittest.TestCase):
                 validate_anki_target_fn=lambda options: None,
                 build_anki_notes_fn=build_anki_notes,
                 fetch_existing_notes_by_front_fn=lambda options: {
-                    front: list(notes)
-                    for front, notes in existing_notes_by_front.items()
+                    front: list(notes) for front, notes in existing_notes_by_front.items()
                 },
                 invoke_anki_connect_fn=lambda url, action, params=None: [True, False],
                 build_existing_note_update_plan_fn=build_existing_note_update_plan,

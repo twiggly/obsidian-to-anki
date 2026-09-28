@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from ..common import duplicate_handling_display_label, format_target_tags
 from ..models import AnkiPreflightSummary, ExportOptions, ScanResult

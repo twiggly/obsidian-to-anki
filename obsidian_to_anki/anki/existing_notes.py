@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Sequence
+from typing import Any
 
+from ..models import ExportOptions
 from .connect_client import (
     AnkiConnectError,
     invoke_anki_connect,
     invoke_anki_connect_multi,
     unexpected_anki_response_message,
 )
-from ..models import ExportOptions
 
 
 @dataclass(frozen=True)
@@ -160,7 +161,10 @@ def build_existing_note_update_plan(
 
     fields_to_update = (
         desired_fields
-        if any(existing_note.fields.get(field_name) != field_value for field_name, field_value in desired_fields.items())
+        if any(
+            existing_note.fields.get(field_name) != field_value
+            for field_name, field_value in desired_fields.items()
+        )
         else None
     )
     missing_tags = [tag for tag in note_tags(note) if tag not in existing_note.tags]
@@ -178,7 +182,9 @@ def apply_existing_note_updates(
     update_plans: Sequence[PendingExistingNoteUpdate],
     *,
     batch_size: int,
-    invoke_anki_connect_multi_fn: Callable[[str, Sequence[dict[str, object]]], list[object]] = invoke_anki_connect_multi,
+    invoke_anki_connect_multi_fn: Callable[
+        [str, Sequence[dict[str, object]]], list[object]
+    ] = invoke_anki_connect_multi,
 ) -> None:
     actions: list[dict[str, object]] = []
     for plan in update_plans:

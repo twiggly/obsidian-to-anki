@@ -25,6 +25,14 @@ def build_cards() -> list[NoteCard]:
 
 
 class AnkiSyncTests(unittest.TestCase):
+    def test_multi_facade_validates_lengths_using_public_transport(self) -> None:
+        with mock.patch.object(anki_sync, "invoke_anki_connect", return_value=[]) as invoke:
+            with self.assertRaisesRegex(anki_sync.AnkiConnectError, "'multi'"):
+                anki_sync._invoke_anki_connect_multi("http://anki", [{"action": "deckNames"}])
+        invoke.assert_called_once_with(
+            "http://anki", "multi", {"actions": [{"action": "deckNames"}]}
+        )
+
     def test_fetch_note_type_fields_returns_field_catalog(self) -> None:
         with mock.patch.object(
             anki_sync,

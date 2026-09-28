@@ -18,8 +18,12 @@ class RenderingTests(unittest.TestCase):
 
         self.assertIn('<div class="dictionary-entry">', rendered)
         self.assertIn('<div class="pos">noun</div>', rendered)
-        self.assertIn('<div class="gloss">an informal private conversation or discussion</div>', rendered)
-        self.assertIn("<ul><li>a meeting or conference of members of a particular group</li></ul>", rendered)
+        self.assertIn(
+            '<div class="gloss">an informal private conversation or discussion</div>', rendered
+        )
+        self.assertIn(
+            "<ul><li>a meeting or conference of members of a particular group</li></ul>", rendered
+        )
 
     def test_markdownish_to_html_supports_part_of_speech_qualifiers(self) -> None:
         rendered = markdownish_to_html("noun (ARCHAIC)\nan old-fashioned meaning")
@@ -53,7 +57,9 @@ class RenderingTests(unittest.TestCase):
                 self.assertIn(f'<div class="pos">{label}</div>', rendered)
                 self.assertIn('<div class="gloss">example meaning</div>', rendered)
 
-    def test_markdownish_to_html_splits_multiple_dictionary_entries_without_blank_lines(self) -> None:
+    def test_markdownish_to_html_splits_multiple_dictionary_entries_without_blank_lines(
+        self,
+    ) -> None:
         rendered = markdownish_to_html("noun\nfirst gloss\n- bullet one\nverb\nsecond gloss")
 
         self.assertEqual(rendered.count('class="dictionary-entry"'), 2)
@@ -62,7 +68,9 @@ class RenderingTests(unittest.TestCase):
         self.assertIn('<div class="gloss">second gloss</div>', rendered)
         self.assertNotIn('<div class="gloss">verb<br>second gloss</div>', rendered)
 
-    def test_markdownish_to_html_keeps_blank_line_senses_inside_single_dictionary_entry(self) -> None:
+    def test_markdownish_to_html_keeps_blank_line_senses_inside_single_dictionary_entry(
+        self,
+    ) -> None:
         rendered = markdownish_to_html(
             "noun\n"
             "lack of good sense; foolishness\n"

@@ -41,7 +41,9 @@ class CliTests(unittest.TestCase):
             self.assertIn("Exported 1 cards", stdout)
             self.assertEqual(stderr, "")
             self.assertTrue(output_path.exists())
-            self.assertIn("Definition\tA body\tdefinition", output_path.read_text(encoding="utf-8-sig"))
+            self.assertIn(
+                "Definition\tA body\tdefinition", output_path.read_text(encoding="utf-8-sig")
+            )
 
     def test_main_reports_duplicate_fronts_on_stderr_for_suffix_mode(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -117,8 +119,12 @@ class CliTests(unittest.TestCase):
             vault_path = Path(temp_dir) / "vault"
             (vault_path / "Included").mkdir(parents=True)
             (vault_path / "Excluded").mkdir(parents=True)
-            (vault_path / "Included" / "Keep.md").write_text("#definition\nKeep me", encoding="utf-8")
-            (vault_path / "Excluded" / "Skip.md").write_text("#definition\nSkip me", encoding="utf-8")
+            (vault_path / "Included" / "Keep.md").write_text(
+                "#definition\nKeep me", encoding="utf-8"
+            )
+            (vault_path / "Excluded" / "Skip.md").write_text(
+                "#definition\nSkip me", encoding="utf-8"
+            )
             output_path = Path(temp_dir) / "definitions.tsv"
 
             exit_code, stdout, _ = run_cli(
@@ -208,7 +214,9 @@ class CliTests(unittest.TestCase):
             vault_path.mkdir()
             (vault_path / "Definition.md").write_text("#definition\nA body", encoding="utf-8")
 
-            with mock.patch.object(cli, "deliver_cards", return_value=DeliveryResult()) as deliver_cards:
+            with mock.patch.object(
+                cli, "deliver_cards", return_value=DeliveryResult()
+            ) as deliver_cards:
                 exit_code, _, _ = run_cli(
                     [
                         "--vault",

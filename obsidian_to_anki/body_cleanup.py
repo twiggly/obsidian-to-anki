@@ -69,6 +69,10 @@ def clean_body(body: str, *, flatten_note_links: bool = True) -> str:
     text = re.sub(r"[ \t]+\n", "\n", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     if not flatten_note_links:
-        text = unmask_obsidian_wikilink_targets(text, masked_wikilinks.placeholders, masked_wikilinks.token)
-        text = unmask_markdown_link_destinations(text, masked_links.placeholders, masked_links.token)
+        text = unmask_obsidian_wikilink_targets(
+            text, masked_wikilinks.placeholders, masked_wikilinks.token
+        )
+        text = unmask_markdown_link_destinations(
+            text, masked_links.placeholders, masked_links.token
+        )
     return unmask_code_regions(text, masked_code.placeholders, masked_code.token).strip()

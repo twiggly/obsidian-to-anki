@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator, Sequence
 from pathlib import Path
-from typing import Iterator, Sequence
 
 from .common import validate_vault_path
 from .models import ExportError
@@ -47,7 +47,9 @@ def normalize_folder_filters(raw_filters: Sequence[str], vault_path: Path) -> tu
     return tuple(normalized)
 
 
-def note_matches_folder_filters(note_path: Path, vault_path: Path, include_folders: tuple[str, ...]) -> bool:
+def note_matches_folder_filters(
+    note_path: Path, vault_path: Path, include_folders: tuple[str, ...]
+) -> bool:
     if not include_folders:
         return True
 

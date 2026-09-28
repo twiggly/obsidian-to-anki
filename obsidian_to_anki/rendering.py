@@ -11,7 +11,11 @@ from .html_render import (
     render_dictionary_entry,
     render_inline_text,
 )
-from .preview_render import html_to_preview_text, populate_preview_text_widget, preview_sections_for_card
+from .preview_render import (
+    html_to_preview_text,
+    populate_preview_text_widget,
+    preview_sections_for_card,
+)
 
 __all__ = [
     "clean_body",

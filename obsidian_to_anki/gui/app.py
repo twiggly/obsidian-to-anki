@@ -1,15 +1,66 @@
 from __future__ import annotations
 
-from dataclasses import replace
 import sys
-from pathlib import Path
-from typing import TYPE_CHECKING, Sequence
+from collections.abc import Sequence
+from dataclasses import replace
+from typing import TYPE_CHECKING
 
 from ..anki.sync import OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME, normalize_anki_connect_url
 from ..common import (
     duplicate_handling_display_label,
     duplicate_handling_from_display,
     format_target_tags,
+)
+from ..models import (
+    AnkiCatalog,
+    AnkiDeckSettingsResult,
+    AnkiFieldCatalog,
+    AnkiNoteTypeInstallResult,
+    AnkiPreflightResult,
+    AnkiPreflightSummary,
+    DeliveryResult,
+    ExportOptions,
+    ScanResult,
+)
+from ..reporting import delivery_complete_message, timing_breakdown_lines
+from .anki_controller import (
+    finish_anki_catalog_refresh_error as finish_anki_catalog_refresh_error_helper,
+)
+from .anki_controller import (
+    finish_anki_catalog_refresh_success as finish_anki_catalog_refresh_success_helper,
+)
+from .anki_controller import (
+    finish_anki_connection_check_error as finish_anki_connection_check_error_helper,
+)
+from .anki_controller import (
+    finish_anki_connection_check_success as finish_anki_connection_check_success_helper,
+)
+from .anki_controller import (
+    finish_anki_field_refresh_error as finish_anki_field_refresh_error_helper,
+)
+from .anki_controller import (
+    finish_anki_field_refresh_success as finish_anki_field_refresh_success_helper,
+)
+from .anki_controller import (
+    refresh_anki_catalog as refresh_anki_catalog_helper,
+)
+from .anki_controller import (
+    refresh_anki_catalog_if_needed as refresh_anki_catalog_if_needed_helper,
+)
+from .anki_controller import (
+    refresh_anki_connection as refresh_anki_connection_helper,
+)
+from .anki_controller import (
+    refresh_anki_fields as refresh_anki_fields_helper,
+)
+from .anki_controller import (
+    refresh_anki_fields_if_needed as refresh_anki_fields_if_needed_helper,
+)
+from .anki_controller import (
+    set_anki_connection_status as set_anki_connection_status_helper,
+)
+from .anki_controller import (
+    sync_anki_option_state as sync_anki_option_state_helper,
 )
 from .bootstrap import (
     ANKI_FOCUS_REFRESH_DELAY_MS,
@@ -30,29 +81,28 @@ from .bootstrap import (
     initialize_runtime_state,
     initialize_widget_placeholders,
 )
-from .anki_controller import (
-    finish_anki_connection_check_error as finish_anki_connection_check_error_helper,
-    finish_anki_connection_check_success as finish_anki_connection_check_success_helper,
-    finish_anki_catalog_refresh_error as finish_anki_catalog_refresh_error_helper,
-    finish_anki_catalog_refresh_success as finish_anki_catalog_refresh_success_helper,
-    finish_anki_field_refresh_error as finish_anki_field_refresh_error_helper,
-    finish_anki_field_refresh_success as finish_anki_field_refresh_success_helper,
-    refresh_anki_connection as refresh_anki_connection_helper,
-    refresh_anki_catalog as refresh_anki_catalog_helper,
-    refresh_anki_catalog_if_needed as refresh_anki_catalog_if_needed_helper,
-    refresh_anki_fields as refresh_anki_fields_helper,
-    refresh_anki_fields_if_needed as refresh_anki_fields_if_needed_helper,
-    set_anki_connection_status as set_anki_connection_status_helper,
-    sync_anki_option_state as sync_anki_option_state_helper,
-)
 from .delivery_controller import (
     begin_delivery as begin_delivery_helper,
+)
+from .delivery_controller import (
     finish_delivery_error as finish_delivery_error_helper,
+)
+from .delivery_controller import (
     finish_delivery_success as finish_delivery_success_helper,
+)
+from .delivery_controller import (
     finish_preview_error as finish_preview_error_helper,
+)
+from .delivery_controller import (
     finish_preview_success as finish_preview_success_helper,
+)
+from .delivery_controller import (
     log as log_helper,
+)
+from .delivery_controller import (
     set_busy as set_busy_helper,
+)
+from .delivery_controller import (
     start_preview as start_preview_helper,
 )
 from .logic import (
@@ -60,7 +110,6 @@ from .logic import (
     build_export_options_from_values,
     build_tag_scan_request,
     delivery_action_label,
-    delivery_complete_message,
     delivery_complete_title,
     delivery_progress_message,
     duplicate_front_warning_message,
@@ -68,30 +117,51 @@ from .logic import (
     preview_no_matches_message,
     preview_ready_message,
     recommended_deck_settings_confirmation_message,
-    timing_breakdown_lines,
 )
 from .preview import show_preview_dialog
 from .selection_controller import (
     add_folder_filter as add_folder_filter_helper,
+)
+from .selection_controller import (
     add_selected_tag as add_selected_tag_helper,
+)
+from .selection_controller import (
     finish_tag_scan_error as finish_tag_scan_error_helper,
+)
+from .selection_controller import (
     finish_tag_scan_success as finish_tag_scan_success_helper,
+)
+from .selection_controller import (
     remove_folder_filter as remove_folder_filter_helper,
+)
+from .selection_controller import (
     remove_tag as remove_tag_helper,
+)
+from .selection_controller import (
     scan_vault_tags as scan_vault_tags_helper,
+)
+from .selection_controller import (
     set_folder_filters as set_folder_filters_helper,
+)
+from .selection_controller import (
     set_selected_tags as set_selected_tags_helper,
 )
 from .settings import delete_gui_settings, load_gui_settings, save_gui_settings
 from .state import (
     apply_default_settings as apply_default_settings_helper,
+)
+from .state import (
     apply_saved_settings as apply_saved_settings_helper,
+)
+from .state import (
     collect_settings as collect_settings_helper,
+)
+from .state import (
     sync_status_details_visibility as sync_status_details_visibility_helper,
 )
 from .tasks import (
-    start_anki_connection_check,
     start_anki_catalog_refresh,
+    start_anki_connection_check,
     start_anki_deck_settings_update,
     start_anki_field_catalog_refresh,
     start_anki_note_type_install,
@@ -101,30 +171,23 @@ from .tasks import (
 )
 from .view import (
     add_folder_filter_from_dialog,
-    append_folder_filter,
     append_unique_value,
     build_main_window,
     choose_output,
     choose_vault,
-    get_folder_filters,
     set_anki_field_choices,
     set_combobox_choices,
     sync_anki_option_state,
     sync_html_option_state,
     sync_output_option_state,
 )
-from .widgets import render_tag_chips
-from ..models import (
-    AnkiCatalog,
-    AnkiDeckSettingsResult,
-    AnkiFieldCatalog,
-    AnkiNoteTypeInstallResult,
-    AnkiPreflightResult,
-    AnkiPreflightSummary,
-    DeliveryResult,
-    ExportOptions,
-    ScanResult,
+from .view import (
+    append_folder_filter as append_folder_filter,
 )
+from .view import (
+    get_folder_filters as get_folder_filters,
+)
+from .widgets import render_tag_chips
 
 if TYPE_CHECKING:
     import tkinter as tk
@@ -144,7 +207,9 @@ def recommended_deck_settings_preset_name(deck_name: str) -> str:
     return f"{OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME} - {deck_name}"
 
 
-def remove_folder_filters(existing_filters: Sequence[str], selected_indexes: Sequence[int]) -> list[str]:
+def remove_folder_filters(
+    existing_filters: Sequence[str], selected_indexes: Sequence[int]
+) -> list[str]:
     selected = {index for index in selected_indexes if 0 <= index < len(existing_filters)}
     return [value for index, value in enumerate(existing_filters) if index not in selected]
 
@@ -339,7 +404,9 @@ class ExporterApp:
         self._anki_note_type_install_loading = True
         self.set_busy(True)
         self.status_var.set(f"Installing the {OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME} note type…")
-        self.log(f"Installing or updating the {OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME} note type in Anki.")
+        self.log(
+            f"Installing or updating the {OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME} note type in Anki."
+        )
         start_anki_note_type_install(
             self.root,
             self.anki_connect_url_var.get(),
@@ -638,21 +705,21 @@ class ExporterApp:
     def build_options_from_form(self) -> ExportOptions | None:
         try:
             return build_export_options_from_values(
-                self.vault_var.get(),
-                self.output_var.get(),
-                self.get_selected_tags_from_listbox(),
-                self.html_var.get(),
-                self.skip_empty_var.get(),
-                self.quoted_italic_var.get(),
-                self.get_folder_filters_from_listbox(),
-                self.duplicate_handling_var.get(),
-                self.sync_to_anki_var.get(),
-                self.anki_connect_url_var.get(),
-                self.anki_deck_var.get(),
-                self.anki_note_type_var.get(),
-                self.anki_front_field_var.get(),
-                self.anki_back_field_var.get(),
-                self.anki_existing_notes_var.get(),
+                vault=self.vault_var.get(),
+                output=self.output_var.get(),
+                tag=self.get_selected_tags_from_listbox(),
+                html_output=self.html_var.get(),
+                skip_empty=self.skip_empty_var.get(),
+                italicize_quoted_text=self.quoted_italic_var.get(),
+                raw_folder_filters=self.get_folder_filters_from_listbox(),
+                duplicate_handling=self.duplicate_handling_var.get(),
+                sync_to_anki=self.sync_to_anki_var.get(),
+                anki_connect_url=self.anki_connect_url_var.get(),
+                anki_deck=self.anki_deck_var.get(),
+                anki_note_type=self.anki_note_type_var.get(),
+                anki_front_field=self.anki_front_field_var.get(),
+                anki_back_field=self.anki_back_field_var.get(),
+                anki_existing_notes=self.anki_existing_notes_var.get(),
                 write_tsv=self.write_tsv_var.get(),
                 flatten_note_links=self.flatten_note_links_var.get(),
             )

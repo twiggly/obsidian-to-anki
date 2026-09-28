@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import sys
 from collections import defaultdict
+from collections.abc import Iterator, Sequence
 from dataclasses import replace
 from pathlib import Path
 from time import perf_counter
-from typing import Iterator, Sequence
 
+from .body_cleanup import clean_body
 from .common import (
     DUPLICATE_PATH_LIMIT,
     DUPLICATE_SUMMARY_LIMIT,
@@ -14,7 +15,6 @@ from .common import (
     effective_target_tags,
     validate_vault_path,
 )
-from .body_cleanup import clean_body
 from .html_render import markdownish_to_html
 from .models import ExportError, ExportOptions, NoteCard, ScanResult
 from .note_parser import extract_tags, split_frontmatter
@@ -108,7 +108,9 @@ def group_cards_by_front(cards: Sequence[NoteCard]) -> dict[str, list[NoteCard]]
     return groups
 
 
-def build_duplicate_front_map(front_groups: dict[str, list[NoteCard]]) -> dict[str, tuple[Path, ...]]:
+def build_duplicate_front_map(
+    front_groups: dict[str, list[NoteCard]],
+) -> dict[str, tuple[Path, ...]]:
     duplicate_fronts: dict[str, tuple[Path, ...]] = {}
     for entries in front_groups.values():
         if len(entries) > 1:
@@ -139,8 +141,7 @@ def resolve_duplicate_fronts(
         seen_fronts: set[str] = set()
         resolved_cards: list[NoteCard] = []
         duplicate_resolutions = {
-            entries[0].front: (entries[0].front,)
-            for entries in duplicate_groups.values()
+            entries[0].front: (entries[0].front,) for entries in duplicate_groups.values()
         }
         for card in cards:
             front_key = card.front.casefold()
@@ -157,17 +158,20 @@ def resolve_duplicate_fronts(
         duplicate_resolutions: dict[str, tuple[str, ...]] = {}
         for entries in duplicate_groups.values():
             updated_cards: list[NoteCard] = []
-            for original_card, label in zip(entries, build_duplicate_suffix_labels(entries, vault_path)):
+            for original_card, label in zip(
+                entries, build_duplicate_suffix_labels(entries, vault_path), strict=True
+            ):
                 updated_card = replace(
                     original_card,
                     front=f"{original_card.front} ({label})",
                 )
-                replacements[(original_card.front.casefold(), original_card.source_path)] = updated_card
+                replacements[(original_card.front.casefold(), original_card.source_path)] = (
+                    updated_card
+                )
                 updated_cards.append(updated_card)
             duplicate_resolutions[entries[0].front] = tuple(card.front for card in updated_cards)
         return [
-            replacements.get((card.front.casefold(), card.source_path), card)
-            for card in cards
+            replacements.get((card.front.casefold(), card.source_path), card) for card in cards
         ], dict(sorted(duplicate_resolutions.items(), key=lambda item: item[0].casefold()))
 
     raise ExportError(f"Unsupported duplicate handling strategy: {strategy}")

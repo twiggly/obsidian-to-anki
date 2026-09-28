@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 from urllib import error, request
 
 from ..models import ExportError
-
 
 ANKI_CONNECT_API_VERSION = 5
 
@@ -78,10 +78,16 @@ def invoke_anki_connect(url: str, action: str, params: dict[str, Any] | None = N
     return body["result"]
 
 
-def invoke_anki_connect_multi(url: str, actions: Sequence[dict[str, object]]) -> list[object]:
+def invoke_anki_connect_multi(
+    url: str,
+    actions: Sequence[dict[str, object]],
+    *,
+    invoke_anki_connect_fn: Callable[[str, str, dict[str, object] | None], object] | None = None,
+) -> list[object]:
     if not actions:
         return []
-    results = invoke_anki_connect(url, "multi", {"actions": list(actions)})
+    invoke = invoke_anki_connect if invoke_anki_connect_fn is None else invoke_anki_connect_fn
+    results = invoke(url, "multi", {"actions": list(actions)})
     if not isinstance(results, list) or len(results) != len(actions):
         raise AnkiConnectError(unexpected_anki_response_message("multi"))
     return results

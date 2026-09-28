@@ -1,10 +1,14 @@
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest import mock
 
+from obsidian_to_anki.anki import sync
 from obsidian_to_anki.common import unexpected_error_message
+from obsidian_to_anki.gui import tasks
 from obsidian_to_anki.gui.tasks import (
-    run_anki_connection_check_callbacks,
     run_anki_catalog_callbacks,
+    run_anki_connection_check_callbacks,
     run_anki_deck_settings_callbacks,
     run_anki_field_catalog_callbacks,
     run_anki_note_type_install_callbacks,
@@ -15,10 +19,10 @@ from obsidian_to_anki.gui.tasks import (
 from obsidian_to_anki.models import (
     AnkiCatalog,
     AnkiDeckSettingsResult,
+    AnkiFieldCatalog,
     AnkiNoteTypeInstallResult,
     AnkiPreflightResult,
     AnkiPreflightSummary,
-    AnkiFieldCatalog,
     DeliveryResult,
     ExportError,
     ExportOptions,
@@ -43,6 +47,205 @@ def build_scan_result() -> ScanResult:
 
 
 class GuiTaskTests(unittest.TestCase):
+    def test_background_tasks_defer_callbacks_until_tk_dispatch(self) -> None:
+        options = ExportOptions(vault_path=Path("/tmp/vault"))
+        scan_result = build_scan_result()
+        catalog = AnkiCatalog(("Default",), ("Basic",))
+        cases = (
+            (
+                tasks.start_preview_scan,
+                "run_preview_scan_callbacks",
+                (options,),
+                (options, scan_result, None, "Anki unavailable", None),
+            ),
+            (
+                tasks.start_tag_catalog_scan,
+                "run_tag_catalog_callbacks",
+                (Path("/tmp/vault"), ()),
+                (("definition",),),
+            ),
+            (
+                tasks.start_anki_catalog_refresh,
+                "run_anki_catalog_callbacks",
+                ("http://anki",),
+                (catalog,),
+            ),
+            (
+                tasks.start_anki_connection_check,
+                "run_anki_connection_check_callbacks",
+                ("http://anki",),
+                (),
+            ),
+            (
+                tasks.start_anki_field_catalog_refresh,
+                "run_anki_field_catalog_callbacks",
+                ("http://anki", "Basic"),
+                (AnkiFieldCatalog("Basic", ("Front", "Back")),),
+            ),
+            (
+                tasks.start_anki_note_type_install,
+                "run_anki_note_type_install_callbacks",
+                ("http://anki",),
+                (AnkiNoteTypeInstallResult("Term & Definition", True),),
+            ),
+            (
+                tasks.start_anki_deck_settings_update,
+                "run_anki_deck_settings_callbacks",
+                ("http://anki", "Default"),
+                (AnkiDeckSettingsResult("Default", "Recommended", True),),
+            ),
+            (
+                tasks.start_delivery,
+                "run_delivery_callbacks",
+                (options, scan_result),
+                (options, scan_result, DeliveryResult()),
+            ),
+        )
+        for starter, runner_name, inputs, result_args in cases:
+            for outcome in ("success", "error"):
+                with self.subTest(task=starter.__name__, outcome=outcome):
+                    root = mock.Mock()
+                    on_success = mock.Mock()
+                    on_error = mock.Mock()
+                    with (
+                        mock.patch.object(tasks.threading, "Thread") as thread,
+                        mock.patch.object(tasks, runner_name) as runner,
+                    ):
+                        starter(root, *inputs, on_success, on_error)
+                        runner.assert_not_called()
+                        thread.return_value.start.assert_called_once_with()
+                        self.assertTrue(thread.call_args.kwargs["daemon"])
+                        thread.call_args.kwargs["target"]()
+                        self.assertEqual(runner.call_args.args[:-2], inputs)
+                        if outcome == "success":
+                            runner.call_args.args[-2](*result_args)
+                            expected_args = result_args
+                            completion = on_success
+                        else:
+                            runner.call_args.args[-1]("failure", "traceback")
+                            expected_args = ("failure", "traceback")
+                            completion = on_error
+
+                    on_success.assert_not_called()
+                    on_error.assert_not_called()
+                    root.after.assert_called_once()
+                    self.assertEqual(root.after.call_args.args[0], 0)
+                    root.after.call_args.args[1]()
+                    completion.assert_called_once_with(*expected_args)
+
+    def test_delivery_callback_failure_is_not_reported_as_failed_write(self) -> None:
+        for failure in (ExportError("callback"), OSError("callback"), RuntimeError("callback")):
+            with self.subTest(error=type(failure)):
+                on_error = mock.Mock()
+                deliver = mock.Mock(return_value=DeliveryResult(export_count=1))
+                with self.assertRaises(type(failure)) as raised:
+                    run_delivery_callbacks(
+                        ExportOptions(vault_path=Path("/tmp/vault")),
+                        build_scan_result(),
+                        mock.Mock(side_effect=failure),
+                        on_error,
+                        deliver_fn=deliver,
+                    )
+                self.assertIs(raised.exception, failure)
+                deliver.assert_called_once()
+                on_error.assert_not_called()
+
+    def test_error_callback_failure_is_not_recursively_reported(self) -> None:
+        on_error = mock.Mock(side_effect=RuntimeError("callback"))
+        with self.assertRaisesRegex(RuntimeError, "callback"):
+            run_anki_connection_check_callbacks(
+                "http://anki",
+                mock.Mock(),
+                on_error,
+                check_fn=mock.Mock(side_effect=OSError("connection")),
+            )
+        on_error.assert_called_once_with("connection", None)
+
+    def test_unexpected_preflight_failure_preserves_preview(self) -> None:
+        options = ExportOptions(vault_path=Path("/tmp/vault"), sync_to_anki=True)
+        scan_result = build_scan_result()
+        on_success = mock.Mock()
+        on_error = mock.Mock()
+        run_preview_scan_callbacks(
+            options,
+            on_success,
+            on_error,
+            scan_fn=mock.Mock(return_value=scan_result),
+            preflight_fn=mock.Mock(side_effect=RuntimeError("preflight")),
+        )
+        on_success.assert_called_once_with(
+            options, scan_result, None, unexpected_error_message("Anki preflight"), None
+        )
+        on_error.assert_not_called()
+
+    def test_delivery_receives_cached_preflight_and_attaches_report(self) -> None:
+        options = ExportOptions(vault_path=Path("/tmp/vault"), sync_to_anki=True)
+        scan_result = build_scan_result()
+        cached = AnkiPreflightResult(AnkiPreflightSummary(1, 0, 0, "Default", "Basic"), (), ())
+        deliver = mock.Mock(return_value=DeliveryResult(export_count=1))
+        on_success = mock.Mock()
+        run_delivery_callbacks(
+            options,
+            scan_result,
+            on_success,
+            mock.Mock(),
+            deliver_fn=deliver,
+            anki_preflight_result=cached,
+        )
+        deliver.assert_called_once_with(options, scan_result.cards, cached)
+        self.assertIn("Duplicate fronts detected", on_success.call_args.args[2].report_text)
+
+    def test_default_delivery_exports_and_reuses_cached_preflight(self) -> None:
+        for sync_to_anki in (False, True):
+            with self.subTest(sync_to_anki=sync_to_anki), TemporaryDirectory() as temp_dir:
+                output_path = Path(temp_dir) / "cards.tsv"
+                options = ExportOptions(
+                    vault_path=Path(temp_dir),
+                    output_path=output_path,
+                    sync_to_anki=sync_to_anki,
+                )
+                scan_result = build_scan_result()
+                notes = sync.build_anki_notes(options, scan_result.cards)
+                cached = (
+                    AnkiPreflightResult(
+                        AnkiPreflightSummary(1, 0, 0, "Default", "Basic"),
+                        tuple(notes),
+                        (True,),
+                    )
+                    if sync_to_anki
+                    else None
+                )
+                on_success = mock.Mock()
+                on_error = mock.Mock()
+                with mock.patch.object(sync, "invoke_anki_connect", return_value=[123]) as invoke:
+                    run_delivery_callbacks(
+                        options,
+                        scan_result,
+                        on_success,
+                        on_error,
+                        anki_preflight_result=cached,
+                    )
+
+                on_error.assert_not_called()
+                on_success.assert_called_once()
+                self.assertEqual(on_success.call_args.args[:2], (options, scan_result))
+                result = on_success.call_args.args[2]
+                self.assertEqual(result.export_count, 1)
+                self.assertEqual(result.output_path, output_path)
+                self.assertIn("Duplicate fronts detected", result.report_text)
+                self.assertEqual(
+                    output_path.read_text(encoding="utf-8-sig"),
+                    "Definition\tBody\tdefinition\n",
+                )
+                if sync_to_anki:
+                    self.assertEqual(result.sync_result.added_count, 1)
+                    invoke.assert_called_once_with(
+                        options.anki_connect_url, "addNotes", {"notes": notes}
+                    )
+                else:
+                    self.assertIsNone(result.sync_result)
+                    invoke.assert_not_called()
+
     def test_run_tag_catalog_callbacks_routes_success(self) -> None:
         calls: list[tuple[str, object, object | None]] = []
 
@@ -73,7 +276,9 @@ class GuiTaskTests(unittest.TestCase):
         self.assertEqual(calls, [("error", "Invalid vault", None)])
 
     def test_run_anki_catalog_callbacks_routes_success(self) -> None:
-        expected_catalog = AnkiCatalog(deck_names=("Default", "Obsidian"), note_type_names=("Basic", "Cloze"))
+        expected_catalog = AnkiCatalog(
+            deck_names=("Default", "Obsidian"), note_type_names=("Basic", "Cloze")
+        )
         calls: list[tuple[str, object, object | None]] = []
 
         run_anki_catalog_callbacks(
@@ -216,13 +421,15 @@ class GuiTaskTests(unittest.TestCase):
 
         run_preview_scan_callbacks(
             options,
-            lambda completed_options, scan_result, preflight_summary, preflight_error, preflight_result: calls.append(
-                (
-                    "success",
-                    completed_options,
-                    scan_result,
-                    preflight_summary or preflight_error,
-                    preflight_result,
+            lambda completed_options, scan_result, preflight_summary, preflight_error, preflight_result: (
+                calls.append(
+                    (
+                        "success",
+                        completed_options,
+                        scan_result,
+                        preflight_summary or preflight_error,
+                        preflight_result,
+                    )
                 )
             ),
             lambda error_message, details=None: calls.append(("error", error_message, details)),
@@ -246,12 +453,22 @@ class GuiTaskTests(unittest.TestCase):
 
         run_preview_scan_callbacks(
             options,
-            lambda completed_options, scan_result, preflight_summary, preflight_error, preflight_result: calls.append(
-                ("success", completed_options, preflight_summary, preflight_error, preflight_result)
+            lambda completed_options, scan_result, preflight_summary, preflight_error, preflight_result: (
+                calls.append(
+                    (
+                        "success",
+                        completed_options,
+                        preflight_summary,
+                        preflight_error,
+                        preflight_result,
+                    )
+                )
             ),
             lambda error_message, details=None: calls.append(("error", error_message, details)),
             scan_fn=lambda received_options, preview_limit: expected_result,
-            preflight_fn=lambda received_options, cards: (_ for _ in ()).throw(ExportError("Anki unavailable")),
+            preflight_fn=lambda received_options, cards: (_ for _ in ()).throw(
+                ExportError("Anki unavailable")
+            ),
         )
 
         self.assertEqual(calls, [("success", options, None, "Anki unavailable", None)])
@@ -265,8 +482,16 @@ class GuiTaskTests(unittest.TestCase):
 
         run_preview_scan_callbacks(
             options,
-            lambda completed_options, scan_result, preflight_summary, preflight_error, preflight_result: calls.append(
-                ("success", str(completed_options), str(scan_result), str(preflight_summary), str(preflight_result))
+            lambda completed_options, scan_result, preflight_summary, preflight_error, preflight_result: (
+                calls.append(
+                    (
+                        "success",
+                        str(completed_options),
+                        str(scan_result),
+                        str(preflight_summary),
+                        str(preflight_result),
+                    )
+                )
             ),
             lambda error_message, details=None: calls.append(("error", error_message, details)),
             scan_fn=fail_scan,
@@ -283,8 +508,16 @@ class GuiTaskTests(unittest.TestCase):
 
         run_preview_scan_callbacks(
             options,
-            lambda completed_options, scan_result, preflight_summary, preflight_error, preflight_result: calls.append(
-                ("success", str(completed_options), str(scan_result), str(preflight_summary), str(preflight_result))
+            lambda completed_options, scan_result, preflight_summary, preflight_error, preflight_result: (
+                calls.append(
+                    (
+                        "success",
+                        str(completed_options),
+                        str(scan_result),
+                        str(preflight_summary),
+                        str(preflight_result),
+                    )
+                )
             ),
             lambda error_message, details=None: calls.append(("error", error_message, details)),
             scan_fn=fail_scan,
@@ -326,7 +559,9 @@ class GuiTaskTests(unittest.TestCase):
         scan_result = build_scan_result()
         calls: list[tuple[str, str, str | None]] = []
 
-        def fail_delivery(_: ExportOptions, __: list[NoteCard], ___: AnkiPreflightResult | None = None) -> DeliveryResult:
+        def fail_delivery(
+            _: ExportOptions, __: list[NoteCard], ___: AnkiPreflightResult | None = None
+        ) -> DeliveryResult:
             raise ExportError("Disk full")
 
         run_delivery_callbacks(
@@ -346,7 +581,9 @@ class GuiTaskTests(unittest.TestCase):
         scan_result = build_scan_result()
         calls: list[tuple[str, str, str | None]] = []
 
-        def fail_delivery(_: ExportOptions, __: list[NoteCard], ___: AnkiPreflightResult | None = None) -> DeliveryResult:
+        def fail_delivery(
+            _: ExportOptions, __: list[NoteCard], ___: AnkiPreflightResult | None = None
+        ) -> DeliveryResult:
             raise RuntimeError("write failed")
 
         run_delivery_callbacks(

@@ -3,8 +3,9 @@ from __future__ import annotations
 import csv
 import os
 import tempfile
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, Sequence, TextIO
+from typing import TextIO
 
 from .models import ExportError, ExportOptions, NoteCard
 
