@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from .common import (
     ANKI_EXISTING_NOTE_CHOICES,
@@ -18,9 +18,8 @@ from .common import (
 )
 from .delivery import deliver_cards
 from .gui import launch_gui
-from .gui.logic import delivery_complete_message, timing_breakdown_lines
 from .models import ExportError, ExportOptions
-from .reporting import attach_delivery_report
+from .reporting import attach_delivery_report, delivery_complete_message, timing_breakdown_lines
 from .scan_filters import normalize_folder_filters
 from .scanner_engine import build_duplicate_summary, scan_cards
 

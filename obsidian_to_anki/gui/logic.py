@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from ..anki.sync import normalize_anki_connect_url
 from ..common import (
-    duplicate_handling_warning_message,
+    duplicate_handling_warning_message as duplicate_handling_warning_message,
+)
+from ..common import (
     effective_italicize_quoted_text,
     format_target_tags,
     normalize_anki_existing_notes,
@@ -14,7 +16,17 @@ from ..common import (
     normalize_target_tags,
     validate_vault_path,
 )
-from ..models import DeliveryResult, ExportError, ExportOptions, ScanResult
+from ..models import DeliveryResult as DeliveryResult
+from ..models import ExportError, ExportOptions, ScanResult
+from ..reporting import (
+    delivery_complete_message as delivery_complete_message,
+)
+from ..reporting import (
+    format_seconds as format_seconds,
+)
+from ..reporting import (
+    timing_breakdown_lines as timing_breakdown_lines,
+)
 from ..scanner import normalize_folder_filters
 
 
@@ -175,39 +187,6 @@ def preview_ready_message(scan_result: ScanResult) -> str:
     return f"Preview ready. Showing the first {preview_count} of {scan_result.total_matches} matching cards."
 
 
-def format_seconds(seconds: float) -> str:
-    return f"{seconds:.2f}s"
-
-
-def timing_breakdown_lines(
-    scan_result: ScanResult,
-    delivery_result: DeliveryResult | None = None,
-) -> list[str]:
-    summary_parts = [f"scan {format_seconds(scan_result.scan_seconds)}"]
-
-    if delivery_result is None:
-        return [f"Timing: {', '.join(summary_parts)}"]
-
-    if delivery_result.output_path is not None:
-        summary_parts.append(f"export {format_seconds(delivery_result.export_seconds)}")
-
-    detail_parts: list[str] = []
-    if delivery_result.sync_result is not None:
-        timing = delivery_result.sync_result.timing
-        summary_parts.append(f"sync {format_seconds(timing.total_seconds)}")
-        detail_parts.append(f"validate {format_seconds(timing.validation_seconds)}")
-        if timing.existing_lookup_seconds > 0:
-            detail_parts.append(f"lookup {format_seconds(timing.existing_lookup_seconds)}")
-        detail_parts.append(f"check duplicates {format_seconds(timing.can_add_seconds)}")
-        detail_parts.append(f"write changes {format_seconds(timing.write_seconds)}")
-
-    summary_parts.append(f"total {format_seconds(delivery_result.total_seconds)}")
-    lines = [f"Timing: {', '.join(summary_parts)}"]
-    if detail_parts:
-        lines.append(f"Anki sync: {', '.join(detail_parts)}")
-    return lines
-
-
 def recommended_deck_settings_confirmation_message(deck_name: str, preset_name: str) -> str:
     return (
         f"Apply the recommended deck settings to '{deck_name}'?\n\n"
@@ -246,7 +225,9 @@ def duplicate_popup_intro_message(duplicate_handling: str, duplicate_count: int)
     if duplicate_handling == "skip":
         behavior = "Current handling: keep the first matching note and ignore the rest."
     elif duplicate_handling == "suffix":
-        behavior = "Current handling: keep all matching notes and add folder suffixes to each front."
+        behavior = (
+            "Current handling: keep all matching notes and add folder suffixes to each front."
+        )
     elif duplicate_handling == "error":
         behavior = "Current handling: stop before export or sync until the duplicates are resolved."
     else:
@@ -333,38 +314,3 @@ def delivery_complete_title(options: ExportOptions) -> str:
     if options.sync_to_anki:
         return "Sync complete"
     return "Export complete"
-
-
-def delivery_complete_message(
-    options: ExportOptions,
-    delivery_result: DeliveryResult,
-    duplicate_count: int,
-) -> str:
-    message_parts: list[str] = []
-    if delivery_result.export_count and delivery_result.output_path is not None:
-        message_parts.append(f"Exported {delivery_result.export_count} cards to: {delivery_result.output_path}")
-
-    if delivery_result.sync_result is not None:
-        sync_result = delivery_result.sync_result
-        if sync_result.added_count:
-            sync_message = (
-                f"Synced {sync_result.added_count} cards to Anki deck '{sync_result.deck_name}' "
-                f"using note type '{sync_result.note_type}'."
-            )
-        elif sync_result.updated_count:
-            sync_message = (
-                f"Updated {sync_result.updated_count} existing Anki notes in deck '{sync_result.deck_name}' "
-                f"using note type '{sync_result.note_type}'."
-            )
-        else:
-            sync_message = f"No new Anki notes were added to deck '{sync_result.deck_name}'."
-        if sync_result.updated_count and sync_result.added_count:
-            sync_message += f" Updated {sync_result.updated_count} existing notes."
-        if sync_result.skipped_count:
-            sync_message += f" Skipped {sync_result.skipped_count} existing notes."
-        message_parts.append(sync_message)
-
-    message = " ".join(message_parts) or "Completed processing cards."
-    if duplicate_count:
-        message += f" {duplicate_handling_warning_message(options.duplicate_handling, duplicate_count)}"
-    return message

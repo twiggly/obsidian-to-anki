@@ -1,57 +1,93 @@
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
+from ..models import (
+    AnkiCatalog,
+    AnkiDeckSettingsResult,
+    AnkiFieldCatalog,
+    AnkiNoteTypeInstallResult,
+    AnkiPreflightResult,
+    AnkiPreflightSummary,
+    AnkiSyncResult,
+    ExportOptions,
+    NoteCard,
+)
 from .catalog import (
     check_anki_connection as check_anki_connection_impl,
+)
+from .catalog import (
     fetch_anki_catalog as fetch_anki_catalog_impl,
+)
+from .catalog import (
     fetch_note_type_fields as fetch_note_type_fields_impl,
+)
+from .catalog import (
     validate_anki_target as validate_anki_target_impl,
 )
 from .connect_client import (
     ANKI_CONNECT_API_VERSION,
     AnkiConnectError,
     format_anki_error,
-    invoke_anki_connect as invoke_anki_connect_impl,
     is_duplicate_note_error,
     normalize_anki_connect_url,
-    request,
-    unexpected_anki_response_message,
+)
+from .connect_client import (
+    invoke_anki_connect as invoke_anki_connect_impl,
+)
+from .connect_client import (
+    invoke_anki_connect_multi as invoke_anki_connect_multi_impl,
+)
+from .connect_client import (
+    request as request,
+)
+from .connect_client import (
+    unexpected_anki_response_message as unexpected_anki_response_message,
 )
 from .deck_settings import apply_recommended_deck_settings as apply_recommended_deck_settings_impl
 from .existing_notes import (
     ExistingAnkiNote,
     PendingExistingNoteUpdate,
+)
+from .existing_notes import (
     apply_existing_note_updates as apply_existing_note_updates_impl,
+)
+from .existing_notes import (
     build_existing_note_snapshot as build_existing_note_snapshot_impl,
+)
+from .existing_notes import (
     build_existing_note_update_plan as build_existing_note_update_plan_impl,
+)
+from .existing_notes import (
     fetch_existing_notes_by_front as fetch_existing_notes_by_front_impl,
+)
+from .existing_notes import (
     note_front_value as note_front_value_impl,
 )
 from .note_types import (
     OBSIDIAN_DEFINITIONS_NOTE_TYPE_NAME,
+)
+from .note_types import (
     install_obsidian_definitions_note_type as install_obsidian_definitions_note_type_impl,
 )
 from .sync_engine import (
     add_notes_batch as add_notes_batch_impl,
+)
+from .sync_engine import (
     add_single_note as add_single_note_impl,
-    build_anki_preflight_result as build_anki_preflight_result_impl,
-    build_anki_preflight_summary as build_anki_preflight_summary_impl,
+)
+from .sync_engine import (
     build_anki_notes as build_anki_notes_impl,
+)
+from .sync_engine import (
+    build_anki_preflight_result as build_anki_preflight_result_impl,
+)
+from .sync_engine import (
+    build_anki_preflight_summary as build_anki_preflight_summary_impl,
+)
+from .sync_engine import (
     sync_cards_to_anki as sync_cards_to_anki_impl,
 )
-from ..models import (
-    AnkiCatalog,
-    AnkiDeckSettingsResult,
-    AnkiPreflightSummary,
-    AnkiPreflightResult,
-    AnkiFieldCatalog,
-    AnkiNoteTypeInstallResult,
-    AnkiSyncResult,
-    ExportOptions,
-    NoteCard,
-)
-
 
 ANKI_MULTI_ACTION_BATCH_SIZE = 250
 
@@ -82,15 +118,13 @@ __all__ = [
     "sync_cards_to_anki",
 ]
 
+
 def invoke_anki_connect(url: str, action: str, params: dict[str, object] | None = None) -> object:
     return invoke_anki_connect_impl(url, action, params)
 
 
 def _invoke_anki_connect_multi(url: str, actions: Sequence[dict[str, object]]) -> list[object]:
-    results = invoke_anki_connect(url, "multi", {"actions": list(actions)})
-    if not isinstance(results, list):
-        raise AnkiConnectError(unexpected_anki_response_message("multi"))
-    return results
+    return invoke_anki_connect_multi_impl(url, actions, invoke_anki_connect_fn=invoke_anki_connect)
 
 
 def fetch_anki_catalog(anki_connect_url: str) -> AnkiCatalog:
