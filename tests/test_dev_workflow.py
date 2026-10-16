@@ -7,6 +7,7 @@ from pathlib import Path
 
 MAKE = shutil.which("make")
 MAKEFILE = Path(__file__).resolve().parents[1] / "Makefile"
+PR_TEMPLATE = MAKEFILE.parent / ".github/pull_request_template.md"
 CHECK_ARGUMENTS = (
     "-m ruff check .",
     "-m ruff format --check .",
@@ -21,6 +22,10 @@ class DevelopmentWorkflowTests(unittest.TestCase):
         self.addCleanup(temporary_directory.cleanup)
         self.directory = Path(temporary_directory.name)
         shutil.copyfile(MAKEFILE, self.directory / "Makefile")
+        self.pr_template = self.directory / ".github/pull_request_template.md"
+        self.pr_template.parent.mkdir()
+        shutil.copyfile(PR_TEMPLATE, self.pr_template)
+        self.pr_body = self.directory / "pr-body.md"
         self.bin_directory = self.directory / "bin"
         self.bin_directory.mkdir()
         self.command_log = self.directory / "commands.log"
@@ -29,6 +34,7 @@ class DevelopmentWorkflowTests(unittest.TestCase):
             "PATH": str(self.bin_directory),
             "HOME": str(self.directory),
             "COMMAND_LOG": str(self.command_log),
+            "PR_BODY": str(self.pr_body),
             "TEST_BRANCH": "codex/example",
         }
         self.write_python_stub(self.bin_directory / "python3.15", "fallback")
@@ -48,7 +54,16 @@ class DevelopmentWorkflowTests(unittest.TestCase):
         )
         self.write_stub(
             self.bin_directory / "gh",
-            'printf "gh %s\\n" "$*" >> "$COMMAND_LOG"\n',
+            'printf "gh %s\\n" "$*" >> "$COMMAND_LOG"\n'
+            'while [ "$#" -gt 0 ]; do\n'
+            '  if [ "$1" = --body-file ]; then\n'
+            "    shift\n"
+            '    while IFS= read -r line || [ -n "$line" ]; do\n'
+            '      printf "%s\\n" "$line"\n'
+            '    done < "$1" > "$PR_BODY" || exit 1\n'
+            "  fi\n"
+            "  shift\n"
+            "done\n",
         )
 
     def write_stub(self, path: Path, body: str, *, executable: bool = True) -> None:
@@ -98,7 +113,7 @@ class DevelopmentWorkflowTests(unittest.TestCase):
             "git status --porcelain --untracked-files=all",
             *self.check_commands(label),
             "git push -u origin codex/example",
-            "gh pr create --fill --draft",
+            "gh pr create --fill --draft --body-file .github/pull_request_template.md",
         ]
 
     def test_check_prefers_executable_project_python(self) -> None:
@@ -156,6 +171,28 @@ class DevelopmentWorkflowTests(unittest.TestCase):
                     self.commands(),
                     self.pr_commands("virtualenv")[: index + 3],
                 )
+
+    def test_pr_uses_shared_checklist_without_marking_checks_complete(self) -> None:
+        self.assert_success(self.run_make("pr"))
+        self.assertEqual(self.commands(), self.pr_commands("fallback"))
+        body = self.pr_body.read_text(encoding="utf-8")
+        self.assertEqual(body, PR_TEMPLATE.read_text(encoding="utf-8"))
+        self.assertIn("## Summary", body)
+        self.assertIn("- [ ] `make check` passed.", body)
+        self.assertIn("GUI check:", body)
+        self.assertNotIn("- [x]", body.lower())
+
+    def test_pr_requires_template_before_checks_or_remote_actions(self) -> None:
+        self.pr_template.unlink()
+        for state in ("missing", "directory"):
+            with self.subTest(state=state):
+                if state == "directory":
+                    self.pr_template.mkdir()
+                result = self.run_make("pr")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("PR checklist template is missing or unreadable", result.stdout)
+                self.assertEqual(self.commands(), self.pr_commands("fallback")[:2])
+                self.assertFalse(self.pr_body.exists())
 
     def test_pr_requires_github_cli_before_running_checks(self) -> None:
         (self.bin_directory / "gh").unlink()

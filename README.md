@@ -335,10 +335,11 @@ What these do:
 - `make branch NAME=...`: create and switch to `codex/...`; refuses to run unless
   you are on `main`, so a new feature does not accidentally include another feature
 - `make pr`: run lint, formatting checks, and tests, then push the current branch
-  and open a draft PR with `gh`; requires a clean working tree, including no
+  and open a draft PR with `gh`, an automatic title, and the shared PR checklist;
+  requires a clean working tree, including no
   untracked files, so the checked code matches the committed code being pushed.
-  Uncommitted changes, a failed Git status check, or a failed code check prevent
-  both the push and PR creation
+  Uncommitted changes, a failed Git status check, a missing checklist template,
+  or a failed code check prevent both the push and PR creation
 
 `git add <changed-files>` means the specific files you want in the commit. Commit
 or stash unfinished changes before using `make pr`; ignored files such as `.venv`
@@ -346,6 +347,17 @@ do not block it. Neither command commits, stashes, or discards changes for you.
 
 Install the optional development tools before using `make pr`. It still requires
 GitHub CLI (`gh`) and a feature branch rather than `main`.
+
+Before marking a draft ready, fill in its summary and verification checklist.
+Record relevant manual GUI checks, or mark them not applicable for changes that
+do not affect the GUI. The template is `.github/pull_request_template.md`;
+GitHub also uses it for browser-created PRs once it is on the default branch.
+
+Automatic deletion of merged branches is enabled in the GitHub repository
+settings. It removes merged branches on GitHub, not local branches. After a merge,
+update local `main` with `make sync-main`, prune stale remote references with
+`git fetch --prune origin`, and remove the merged local branch with
+`git branch -d codex/your-merged-branch`.
 
 If you just want to see the available helper commands:
 
