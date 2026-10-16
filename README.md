@@ -298,8 +298,14 @@ Python 3.15, matching the project's main development setup. The job installs the
 optional development dependencies and explicitly uses the selected Python version.
 
 These checks run the existing test suite without opening GUI windows or contacting
-a live Anki instance. They do not replace a manual GUI smoke test or enforce branch
-protection. Superseded workflow runs are cancelled automatically.
+a live Anki instance. They do not replace a manual GUI smoke test. Superseded
+workflow runs are cancelled automatically.
+
+The GitHub repository separately protects `main` by requiring
+`Checks (macOS, Python 3.15)` from GitHub Actions before merging, including for
+administrators. No approving reviewer is required. This is a repository setting,
+not something enabled by cloning the code. If the CI job is renamed, update the
+required check in the branch protection settings too.
 
 ## Branch and PR Workflow
 
@@ -310,18 +316,33 @@ make sync-main
 make branch NAME=improve-sync-copy
 ```
 
-Make your changes, then open a draft PR with:
+Make your changes, run the checks, and review and commit the files you intend to
+include before opening a draft PR:
 
 ```bash
+make check
+git diff
+git status --short
+git add <changed-files>
+git diff --cached
+git commit -m "Describe the change"
 make pr
 ```
 
 What these do:
 
 - `make sync-main`: switch to `main` and fast-forward from `origin/main`
-- `make branch NAME=...`: create and switch to `codex/...`
+- `make branch NAME=...`: create and switch to `codex/...`; refuses to run unless
+  you are on `main`, so a new feature does not accidentally include another feature
 - `make pr`: run lint, formatting checks, and tests, then push the current branch
-  and open a draft PR with `gh`; a failed check prevents both the push and PR creation
+  and open a draft PR with `gh`; requires a clean working tree, including no
+  untracked files, so the checked code matches the committed code being pushed.
+  Uncommitted changes, a failed Git status check, or a failed code check prevent
+  both the push and PR creation
+
+`git add <changed-files>` means the specific files you want in the commit. Commit
+or stash unfinished changes before using `make pr`; ignored files such as `.venv`
+do not block it. Neither command commits, stashes, or discards changes for you.
 
 Install the optional development tools before using `make pr`. It still requires
 GitHub CLI (`gh`) and a feature branch rather than `main`.

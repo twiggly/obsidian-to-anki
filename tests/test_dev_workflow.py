@@ -36,7 +36,14 @@ class DevelopmentWorkflowTests(unittest.TestCase):
         self.write_stub(
             self.bin_directory / "git",
             'printf "git %s\\n" "$*" >> "$COMMAND_LOG"\n'
-            'if [ "$1" = branch ]; then printf "%s\\n" "$TEST_BRANCH"; fi\n'
+            'if [ "$1" = branch ]; then\n'
+            '  printf "%s\\n" "$TEST_BRANCH"\n'
+            '  exit "${BRANCH_EXIT_STATUS:-0}"\n'
+            "fi\n"
+            'if [ "$1" = status ]; then\n'
+            '  printf "%s" "${TEST_STATUS:-}"\n'
+            '  exit "${STATUS_EXIT_STATUS:-0}"\n'
+            "fi\n"
             'if [ "$1" = push ]; then exit "${PUSH_EXIT_STATUS:-0}"; fi\n',
         )
         self.write_stub(
@@ -88,6 +95,7 @@ class DevelopmentWorkflowTests(unittest.TestCase):
     def pr_commands(self, label: str) -> list[str]:
         return [
             "git branch --show-current",
+            "git status --porcelain --untracked-files=all",
             *self.check_commands(label),
             "git push -u origin codex/example",
             "gh pr create --fill --draft",
@@ -146,7 +154,7 @@ class DevelopmentWorkflowTests(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(
                     self.commands(),
-                    ["git branch --show-current", *self.check_commands("virtualenv")[: index + 1]],
+                    self.pr_commands("virtualenv")[: index + 3],
                 )
 
     def test_pr_requires_github_cli_before_running_checks(self) -> None:
@@ -171,3 +179,45 @@ class DevelopmentWorkflowTests(unittest.TestCase):
         result = self.run_make("pr", PUSH_EXIT_STATUS="1")
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.commands(), self.pr_commands("fallback")[:-1])
+
+    def test_pr_rejects_uncommitted_changes_before_checks_or_remote_actions(self) -> None:
+        for status in (" M README.md\n", "M  Makefile\n", "?? new-file.txt\n"):
+            with self.subTest(status=status):
+                result = self.run_make("pr", TEST_STATUS=status)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Commit or stash all changes", result.stdout)
+                self.assertEqual(self.commands(), self.pr_commands("fallback")[:2])
+
+    def test_pr_stops_when_git_status_fails(self) -> None:
+        result = self.run_make("pr", STATUS_EXIT_STATUS="128")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.commands(), self.pr_commands("fallback")[:2])
+
+    def test_branch_requires_a_name_before_calling_git(self) -> None:
+        result = self.run_make("branch", TEST_BRANCH="main")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Usage: make branch NAME=short-description", result.stdout)
+        self.assertEqual(self.commands(), [])
+
+    def test_branch_requires_main_before_creating_a_branch(self) -> None:
+        for branch in ("codex/another-feature", "release", ""):
+            with self.subTest(branch=branch):
+                result = self.run_make("branch", "NAME=example", TEST_BRANCH=branch)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Run make sync-main first", result.stdout)
+                self.assertEqual(self.commands(), ["git branch --show-current"])
+
+    def test_branch_creates_requested_branch_from_main(self) -> None:
+        self.assert_success(self.run_make("branch", "NAME=example", TEST_BRANCH="main"))
+        self.assertEqual(
+            self.commands(), ["git branch --show-current", "git switch -c codex/example"]
+        )
+
+    def test_git_branch_failures_stop_branch_and_pr(self) -> None:
+        for target, branch in (("branch", "main"), ("pr", "codex/example")):
+            with self.subTest(target=target):
+                result = self.run_make(
+                    target, "NAME=example", TEST_BRANCH=branch, BRANCH_EXIT_STATUS="128"
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.commands(), ["git branch --show-current"])
