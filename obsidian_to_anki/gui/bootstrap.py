@@ -1,24 +1,24 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..common import duplicate_handling_display_label
+from .settings import _SCALAR_SETTINGS
+from .settings import DEFAULT_ANKI_BACK_FIELD as DEFAULT_ANKI_BACK_FIELD
+from .settings import DEFAULT_ANKI_CONNECT_URL as DEFAULT_ANKI_CONNECT_URL
+from .settings import DEFAULT_ANKI_DECK as DEFAULT_ANKI_DECK
+from .settings import DEFAULT_ANKI_EXISTING_NOTES as DEFAULT_ANKI_EXISTING_NOTES
+from .settings import DEFAULT_ANKI_FRONT_FIELD as DEFAULT_ANKI_FRONT_FIELD
+from .settings import DEFAULT_ANKI_NOTE_TYPE as DEFAULT_ANKI_NOTE_TYPE
+from .settings import DEFAULT_DUPLICATE_HANDLING as DEFAULT_DUPLICATE_HANDLING
+from .settings import DEFAULT_FLATTEN_NOTE_LINKS as DEFAULT_FLATTEN_NOTE_LINKS
+from .settings import DEFAULT_OUTPUT_PATH as DEFAULT_OUTPUT_PATH
+from .settings import DEFAULT_TARGET_TAG as DEFAULT_TARGET_TAG
 
 if TYPE_CHECKING:
     import tkinter as tk
 
 
-DEFAULT_OUTPUT_PATH = str(Path.home() / "Desktop" / "obsidian-to-anki.tsv")
-DEFAULT_TARGET_TAG = ""
-DEFAULT_ANKI_CONNECT_URL = "http://127.0.0.1:8765"
-DEFAULT_ANKI_DECK = "Default"
-DEFAULT_ANKI_NOTE_TYPE = "Basic"
-DEFAULT_ANKI_FRONT_FIELD = "Front"
-DEFAULT_ANKI_BACK_FIELD = "Back"
-DEFAULT_ANKI_EXISTING_NOTES = "update"
-DEFAULT_DUPLICATE_HANDLING = "error"
-DEFAULT_FLATTEN_NOTE_LINKS = False
 DEFAULT_STATUS_MESSAGE = (
     "Choose a vault folder, then turn on Output TSV or enable direct Anki sync."
 )
@@ -33,31 +33,23 @@ def configure_root_window(root: tk.Tk) -> None:
 
 
 def initialize_form_variables(app: object, tk_module: object) -> None:
-    app.vault_var = tk_module.StringVar()
-    app.output_var = tk_module.StringVar(value=DEFAULT_OUTPUT_PATH)
-    app.write_tsv_var = tk_module.BooleanVar(value=False)
-    app.tag_var = tk_module.StringVar(value=DEFAULT_TARGET_TAG)
-    app.html_var = tk_module.BooleanVar(value=False)
-    app.skip_empty_var = tk_module.BooleanVar(value=True)
-    app.quoted_italic_var = tk_module.BooleanVar(value=False)
-    app.flatten_note_links_var = tk_module.BooleanVar(value=DEFAULT_FLATTEN_NOTE_LINKS)
-    app.duplicate_handling_var = tk_module.StringVar(value=DEFAULT_DUPLICATE_HANDLING)
+    for variable_name, default in _SCALAR_SETTINGS.values():
+        variable_type = tk_module.BooleanVar if isinstance(default, bool) else tk_module.StringVar
+        setattr(app, variable_name, variable_type(value=default))
     app.duplicate_handling_display_var = tk_module.StringVar(
         value=duplicate_handling_display_label(DEFAULT_DUPLICATE_HANDLING)
     )
-    app.sync_to_anki_var = tk_module.BooleanVar(value=False)
-    app.anki_connect_url_var = tk_module.StringVar(value=DEFAULT_ANKI_CONNECT_URL)
-    app.anki_deck_var = tk_module.StringVar(value=DEFAULT_ANKI_DECK)
-    app.anki_note_type_var = tk_module.StringVar(value=DEFAULT_ANKI_NOTE_TYPE)
-    app.anki_front_field_var = tk_module.StringVar(value=DEFAULT_ANKI_FRONT_FIELD)
-    app.anki_back_field_var = tk_module.StringVar(value=DEFAULT_ANKI_BACK_FIELD)
-    app.anki_existing_notes_var = tk_module.StringVar(value=DEFAULT_ANKI_EXISTING_NOTES)
     app.anki_connection_var = tk_module.StringVar(value="Sync off")
     app.status_var = tk_module.StringVar(value=DEFAULT_STATUS_MESSAGE)
     app.status_details_var = tk_module.StringVar(value="Show Details")
 
 
 def initialize_runtime_state(app: object) -> None:
+    app._closing = False
+    app._anki_refresh_sequence = 0
+    app._anki_refresh_requests = {}
+    app._anki_refresh_url = None
+    app._anki_refresh_note_type = None
     app.is_busy = False
     app.status_details_visible = False
     app._anki_catalog_loading = False

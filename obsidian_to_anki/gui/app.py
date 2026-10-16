@@ -19,6 +19,7 @@ from ..models import (
     AnkiPreflightResult,
     AnkiPreflightSummary,
     DeliveryResult,
+    ExportError,
     ExportOptions,
     ScanResult,
 )
@@ -41,6 +42,7 @@ from .anki_controller import (
 from .anki_controller import (
     finish_anki_field_refresh_success as finish_anki_field_refresh_success_helper,
 )
+from .anki_controller import invalidate_anki_refreshes
 from .anki_controller import (
     refresh_anki_catalog as refresh_anki_catalog_helper,
 )
@@ -156,6 +158,7 @@ from .state import (
 from .state import (
     collect_settings as collect_settings_helper,
 )
+from .state import report_gui_error
 from .state import (
     sync_status_details_visibility as sync_status_details_visibility_helper,
 )
@@ -255,6 +258,7 @@ class ExporterApp:
             self.root.bind("<FocusIn>", self.on_root_focus, add="+")
 
     def apply_default_settings(self) -> None:
+        invalidate_anki_refreshes(self)
         apply_default_settings_helper(
             self,
             default_output_path=DEFAULT_OUTPUT_PATH,
@@ -284,6 +288,8 @@ class ExporterApp:
         save_gui_settings(self.collect_settings())
 
     def close(self) -> None:
+        self._closing = True
+        invalidate_anki_refreshes(self)
         self.cancel_anki_connection_refresh()
         self.stop_anki_connection_polling()
         try:
@@ -333,7 +339,7 @@ class ExporterApp:
     def on_duplicate_handling_change(self, _: object | None = None) -> None:
         try:
             normalized = duplicate_handling_from_display(self.duplicate_handling_display_var.get())
-        except Exception:
+        except ExportError:
             normalized = DEFAULT_DUPLICATE_HANDLING
         self.duplicate_handling_var.set(normalized)
         self.duplicate_handling_display_var.set(duplicate_handling_display_label(normalized))
@@ -556,7 +562,7 @@ class ExporterApp:
         self.anki_back_field_var.set(back_value)
         try:
             self._last_loaded_anki_url = normalize_anki_connect_url(self.anki_connect_url_var.get())
-        except Exception:
+        except ExportError:
             self._last_loaded_anki_url = None
         self._last_loaded_anki_note_type = resolved_note_type
         messagebox.showinfo("Note type ready", message)
@@ -568,13 +574,13 @@ class ExporterApp:
     ) -> None:
         self._anki_note_type_install_loading = False
         self.set_busy(False)
-        self.status_var.set(error_message)
-        if details is None:
-            self.log(f"Error: {error_message}")
-        else:
-            self.log(error_message)
-            self.log(details.rstrip())
-        messagebox.showerror("Note type install failed", error_message)
+        report_gui_error(
+            self,
+            error_message,
+            details,
+            title="Note type install failed",
+            messagebox_module=messagebox,
+        )
 
     def finish_anki_deck_settings_success(self, result: AnkiDeckSettingsResult) -> None:
         self._anki_deck_settings_loading = False
@@ -597,13 +603,13 @@ class ExporterApp:
     ) -> None:
         self._anki_deck_settings_loading = False
         self.set_busy(False)
-        self.status_var.set(error_message)
-        if details is None:
-            self.log(f"Error: {error_message}")
-        else:
-            self.log(error_message)
-            self.log(details.rstrip())
-        messagebox.showerror("Deck settings update failed", error_message)
+        report_gui_error(
+            self,
+            error_message,
+            details,
+            title="Deck settings update failed",
+            messagebox_module=messagebox,
+        )
 
     def on_anki_connect_url_change(self, _: object | None = None) -> None:
         self.refresh_anki_catalog_if_needed()

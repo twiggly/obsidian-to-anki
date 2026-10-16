@@ -10,6 +10,7 @@ from ..models import (
     ExportOptions,
     ScanResult,
 )
+from .state import report_gui_error
 
 
 def set_busy(app: object, busy: bool) -> None:
@@ -191,13 +192,13 @@ def finish_preview_error(
     messagebox_module: object,
 ) -> None:
     app.set_busy(False)
-    app.status_var.set(error_message)
-    if details is None:
-        app.log(f"Error: {error_message}")
-    else:
-        app.log(error_message)
-        app.log(details.rstrip())
-    messagebox_module.showerror("Preview failed", error_message)
+    report_gui_error(
+        app,
+        error_message,
+        details,
+        title="Preview failed",
+        messagebox_module=messagebox_module,
+    )
 
 
 def begin_delivery(
@@ -278,10 +279,10 @@ def finish_delivery_error(
     messagebox_module: object,
 ) -> None:
     app.set_busy(False)
-    app.status_var.set(error_message)
-    if details is None:
-        app.log(f"Error: {error_message}")
-    else:
-        app.log(error_message)
-        app.log(details.rstrip())
-    messagebox_module.showerror("Delivery failed", error_message)
+    report_gui_error(
+        app,
+        error_message,
+        details,
+        title="Delivery failed",
+        messagebox_module=messagebox_module,
+    )
