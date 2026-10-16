@@ -138,6 +138,7 @@ def build_controller() -> ExporterApp:
     app.reset_button = FakeButton()
     app.output_entry = FakeButton()
     app.output_button = FakeButton()
+    app.quoted_italic_checkbutton = FakeButton()
     app.tag_scan_button = FakeButton()
     app.add_folder_button = FakeButton()
     app.install_note_type_button = FakeButton()
@@ -161,6 +162,11 @@ def build_controller() -> ExporterApp:
     app.log = mock.Mock()
     app.begin_delivery = mock.Mock()
     app.is_busy = False
+    app._closing = False
+    app._anki_refresh_sequence = 0
+    app._anki_refresh_requests = {}
+    app._anki_refresh_url = None
+    app._anki_refresh_note_type = None
     app._anki_catalog_loading = False
     app._anki_connection_check_loading = False
     app._anki_field_loading = False
@@ -573,6 +579,7 @@ class GuiControllerTests(unittest.TestCase):
 
     def test_refresh_anki_catalog_kicks_off_background_refresh(self) -> None:
         app = build_controller()
+        app.sync_to_anki_var.set(True)
 
         with mock.patch.object(gui, "start_anki_catalog_refresh") as start_anki_catalog_refresh:
             ExporterApp.refresh_anki_catalog(app)
@@ -667,6 +674,7 @@ class GuiControllerTests(unittest.TestCase):
 
     def test_refresh_anki_catalog_quietly_keeps_visible_connection_state(self) -> None:
         app = build_controller()
+        app.sync_to_anki_var.set(True)
         app.anki_connection_var = FakeVar("Connected")
         app.status_var = FakeVar("Existing status")
 

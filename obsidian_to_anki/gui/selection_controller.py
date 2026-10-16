@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
-from .state import sanitize_string_values
+from .logic import FormValidationError
+from .state import report_gui_error, sanitize_string_values
 
 
 def set_folder_filters(
@@ -97,7 +98,7 @@ def scan_vault_tags(
             app.vault_var.get(),
             app.get_folder_filters_from_listbox(),
         )
-    except Exception as exc:
+    except FormValidationError as exc:
         messagebox_module.showerror(exc.title, exc.message)
         return
 
@@ -135,10 +136,10 @@ def finish_tag_scan_error(
     messagebox_module: object,
 ) -> None:
     app.set_busy(False)
-    app.status_var.set(error_message)
-    if details is None:
-        app.log(f"Error: {error_message}")
-    else:
-        app.log(error_message)
-        app.log(details.rstrip())
-    messagebox_module.showerror("Tag scan failed", error_message)
+    report_gui_error(
+        app,
+        error_message,
+        details,
+        title="Tag scan failed",
+        messagebox_module=messagebox_module,
+    )
