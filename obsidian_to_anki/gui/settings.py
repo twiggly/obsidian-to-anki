@@ -66,7 +66,7 @@ def load_gui_settings(path: Path | None = None) -> dict[str, object]:
         return {}
     try:
         raw_settings = json.loads(resolved_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except OSError, json.JSONDecodeError:
         return {}
     return sanitize_gui_settings(raw_settings)
 
