@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 MAKE = shutil.which("make")
+GIT = shutil.which("git")
 MAKEFILE = Path(__file__).resolve().parents[1] / "Makefile"
 PR_TEMPLATE = MAKEFILE.parent / ".github/pull_request_template.md"
 CHECK_ARGUMENTS = (
@@ -42,7 +43,8 @@ class DevelopmentWorkflowTests(unittest.TestCase):
         self.write_stub(
             self.bin_directory / "git",
             'printf "git %s\\n" "$*" >> "$COMMAND_LOG"\n'
-            'if [ "$1" = branch ]; then\n'
+            'if [ "$*" = "${FAIL_GIT_COMMAND:-}" ]; then exit 1; fi\n'
+            'if [ "$1" = branch ] && [ "$2" = --show-current ]; then\n'
             '  printf "%s\\n" "$TEST_BRANCH"\n'
             '  exit "${BRANCH_EXIT_STATUS:-0}"\n'
             "fi\n"
@@ -55,6 +57,10 @@ class DevelopmentWorkflowTests(unittest.TestCase):
         self.write_stub(
             self.bin_directory / "gh",
             'printf "gh %s\\n" "$*" >> "$COMMAND_LOG"\n'
+            'if [ "$1" = pr ] && [ "$2" = list ]; then\n'
+            '  printf "%s" "${TEST_PR_URL:-}"\n'
+            '  exit "${PR_LOOKUP_EXIT_STATUS:-0}"\n'
+            "fi\n"
             'while [ "$#" -gt 0 ]; do\n'
             '  if [ "$1" = --body-file ]; then\n'
             "    shift\n"
@@ -112,8 +118,25 @@ class DevelopmentWorkflowTests(unittest.TestCase):
             "git branch --show-current",
             "git status --porcelain --untracked-files=all",
             *self.check_commands(label),
+            "gh pr list --head codex/example --base main --state open "
+            "--json url,isCrossRepository --jq "
+            ".[] | select(.isCrossRepository == false) | .url",
             "git push -u origin codex/example",
-            "gh pr create --fill --draft --body-file .github/pull_request_template.md",
+            "gh pr create --base main --head codex/example --fill --draft "
+            "--body-file .github/pull_request_template.md",
+        ]
+
+    def finish_commands(self) -> list[str]:
+        return [
+            "git check-ref-format refs/heads/codex/example",
+            "git status --porcelain --untracked-files=all",
+            "git show-ref --verify --quiet refs/heads/codex/example",
+            "git fetch --prune origin",
+            "git merge-base --is-ancestor refs/heads/codex/example refs/remotes/origin/main",
+            "git merge-base --is-ancestor refs/heads/main refs/remotes/origin/main",
+            "git switch main",
+            "git merge --ff-only refs/remotes/origin/main",
+            "git branch -d -- codex/example",
         ]
 
     def test_check_prefers_executable_project_python(self) -> None:
@@ -181,6 +204,28 @@ class DevelopmentWorkflowTests(unittest.TestCase):
         self.assertIn("- [ ] `make check` passed.", body)
         self.assertIn("GUI check:", body)
         self.assertNotIn("- [x]", body.lower())
+
+    def test_repeated_pr_run_pushes_and_reuses_existing_pr_without_editing_it(self) -> None:
+        self.assert_success(self.run_make("pr"))
+        edited_body = "## Summary\nReviewed changes.\n\n- [x] Checks passed.\n"
+        self.pr_body.write_text(edited_body, encoding="utf-8")
+        url = "https://github.com/example/project/pull/123"
+
+        self.assert_success(result := self.run_make("pr", TEST_PR_URL=url))
+
+        self.assertEqual(self.commands(), self.pr_commands("fallback")[:-1])
+        self.assertIn(url, result.stdout)
+        self.assertEqual(self.pr_body.read_text(encoding="utf-8"), edited_body)
+
+    def test_pr_lookup_failures_prevent_push_and_creation(self) -> None:
+        for status in ("1", "4"):
+            with self.subTest(exit_status=status):
+                result = self.run_make(
+                    "pr", PR_LOOKUP_EXIT_STATUS=status, TEST_PR_URL="partial output"
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.commands(), self.pr_commands("fallback")[:-2])
+                self.assertFalse(self.pr_body.exists())
 
     def test_pr_requires_template_before_checks_or_remote_actions(self) -> None:
         self.pr_template.unlink()
@@ -258,3 +303,205 @@ class DevelopmentWorkflowTests(unittest.TestCase):
                 )
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(self.commands(), ["git branch --show-current"])
+
+    def test_finish_updates_main_then_deletes_only_the_named_branch(self) -> None:
+        self.assert_success(self.run_make("finish", "BRANCH=codex/example"))
+        self.assertEqual(self.commands(), self.finish_commands())
+
+    def test_finish_requires_a_branch_and_refuses_main_before_calling_git(self) -> None:
+        for branch, message in (
+            ("", "Usage: make finish BRANCH="),
+            ("main", "Cannot delete main"),
+        ):
+            with self.subTest(branch=branch):
+                result = self.run_make("finish", f"BRANCH={branch}")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stdout)
+                self.assertEqual(self.commands(), [])
+
+    def test_finish_rejects_uncommitted_changes_before_fetching_or_switching(self) -> None:
+        for status in (" M README.md\n", "M  Makefile\n", "?? new-file.txt\n"):
+            with self.subTest(status=status):
+                result = self.run_make("finish", "BRANCH=codex/example", TEST_STATUS=status)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Commit or stash all changes", result.stdout)
+                self.assertEqual(self.commands(), self.finish_commands()[:2])
+
+    def test_finish_stops_on_each_git_failure(self) -> None:
+        for index, command in enumerate(self.finish_commands()):
+            with self.subTest(command=command):
+                result = self.run_make(
+                    "finish", "BRANCH=codex/example", FAIL_GIT_COMMAND=command.removeprefix("git ")
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.commands(), self.finish_commands()[: index + 1])
+
+
+@unittest.skipUnless(
+    MAKE and GIT and os.name == "posix", "Cleanup tests require POSIX make and Git"
+)
+class FinishWorkflowGitTests(unittest.TestCase):
+    def setUp(self) -> None:
+        temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary_directory.cleanup)
+        self.directory = Path(temporary_directory.name)
+        self.remote = self.directory / "remote.git"
+        self.repository = self.directory / "repository"
+        # Only disposable local repositories are reachable; ignore user Git configuration.
+        self.environment = {
+            "PATH": os.defpath,
+            "HOME": str(self.directory),
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_ALLOW_PROTOCOL": "file",
+            "GIT_TERMINAL_PROMPT": "0",
+            "GIT_AUTHOR_NAME": "Workflow Tests",
+            "GIT_AUTHOR_EMAIL": "workflow@example.invalid",
+            "GIT_COMMITTER_NAME": "Workflow Tests",
+            "GIT_COMMITTER_EMAIL": "workflow@example.invalid",
+        }
+        self.git("init", "--bare", "--initial-branch=main", str(self.remote), cwd=self.directory)
+        self.git("clone", str(self.remote), str(self.repository), cwd=self.directory)
+        shutil.copyfile(MAKEFILE, self.repository / "Makefile")
+        self.git("add", "Makefile")
+        self.git("commit", "-m", "Initial commit")
+        self.git("push", "-u", "origin", "main")
+        self.initial_commit = self.git("rev-parse", "HEAD").stdout.strip()
+        self.git("switch", "-c", "codex/example")
+        self.git("commit", "--allow-empty", "-m", "Feature commit")
+        self.git("push", "-u", "origin", "codex/example")
+        self.feature_commit = self.git("rev-parse", "HEAD").stdout.strip()
+
+    def git(
+        self, *arguments: str, cwd: Path | None = None, check: bool = True
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [GIT, *arguments],
+            cwd=cwd or self.repository,
+            env=self.environment,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=check,
+        )
+
+    def publish_merge(self) -> None:
+        publisher = self.directory / "publisher"
+        self.git("clone", str(self.remote), str(publisher), cwd=self.directory)
+        self.git("merge", "--no-ff", "-m", "Merge feature", "origin/codex/example", cwd=publisher)
+        self.git("push", "origin", "main", cwd=publisher)
+        self.git("push", "origin", "--delete", "codex/example", cwd=publisher)
+
+    def finish(self, branch: str = "codex/example") -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [MAKE, "--no-print-directory", "finish", f"BRANCH={branch}"],
+            cwd=self.repository,
+            env=self.environment,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+
+    def assert_branch_present(self, branch: str = "codex/example") -> None:
+        self.git("show-ref", "--verify", f"refs/heads/{branch}")
+
+    def assert_branch_absent(self, ref: str) -> None:
+        self.assertNotEqual(self.git("show-ref", "--verify", ref, check=False).returncode, 0)
+
+    def test_finish_fast_forwards_main_prunes_and_deletes_merged_branch(self) -> None:
+        self.publish_merge()
+
+        result = self.finish()
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(self.git("branch", "--show-current").stdout.strip(), "main")
+        self.assertEqual(
+            self.git("rev-parse", "main").stdout, self.git("rev-parse", "origin/main").stdout
+        )
+        self.assert_branch_absent("refs/heads/codex/example")
+        self.assert_branch_absent("refs/remotes/origin/codex/example")
+        self.assertEqual(self.git("status", "--porcelain").stdout, "")
+
+    def test_finish_can_start_on_main(self) -> None:
+        self.publish_merge()
+        self.git("switch", "main")
+        result = self.finish()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assert_branch_absent("refs/heads/codex/example")
+
+    def test_finish_keeps_unmerged_branch_even_when_its_upstream_contains_it(self) -> None:
+        result = self.finish()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("fully merged into origin/main", result.stdout)
+        self.assert_branch_present()
+        self.assertEqual(self.git("rev-parse", "HEAD").stdout.strip(), self.feature_commit)
+        self.assertEqual(self.git("rev-parse", "main").stdout.strip(), self.initial_commit)
+
+    def test_finish_keeps_new_local_commits_after_remote_merge(self) -> None:
+        self.publish_merge()
+        self.git("commit", "--allow-empty", "-m", "Unmerged follow-up")
+        follow_up = self.git("rev-parse", "HEAD").stdout
+        self.assertNotEqual(self.finish().returncode, 0)
+        self.assert_branch_present()
+        self.assertEqual(self.git("rev-parse", "HEAD").stdout, follow_up)
+
+    def test_finish_preserves_untracked_files_and_current_branch(self) -> None:
+        self.publish_merge()
+        unfinished_file = self.repository / "unfinished.txt"
+        unfinished_file.write_text("Keep this work.\n", encoding="utf-8")
+        self.assertNotEqual(self.finish().returncode, 0)
+        self.assert_branch_present()
+        self.assertEqual(self.git("branch", "--show-current").stdout.strip(), "codex/example")
+        self.assertEqual(unfinished_file.read_text(encoding="utf-8"), "Keep this work.\n")
+
+    def test_finish_refuses_divergent_main_without_switching(self) -> None:
+        self.publish_merge()
+        self.git("switch", "main")
+        self.git("commit", "--allow-empty", "-m", "Divergent main work")
+        local_main = self.git("rev-parse", "main").stdout
+        self.git("switch", "codex/example")
+
+        result = self.finish()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Local main is missing or has commits", result.stdout)
+        self.assert_branch_present()
+        self.assertEqual(self.git("rev-parse", "main").stdout, local_main)
+        self.assertEqual(self.git("branch", "--show-current").stdout.strip(), "codex/example")
+
+    def test_finish_refuses_main_ahead_of_origin(self) -> None:
+        self.publish_merge()
+        self.git("fetch", "origin")
+        self.git("switch", "main")
+        self.git("merge", "--ff-only", "origin/main")
+        self.git("commit", "--allow-empty", "-m", "Unpushed main work")
+        local_main = self.git("rev-parse", "main").stdout
+        self.assertNotEqual(self.finish().returncode, 0)
+        self.assert_branch_present()
+        self.assertEqual(self.git("rev-parse", "main").stdout, local_main)
+
+    def test_finish_does_not_delete_branch_checked_out_in_another_worktree(self) -> None:
+        self.publish_merge()
+        self.git("switch", "main")
+        worktree = self.directory / "other-worktree"
+        self.git("worktree", "add", str(worktree), "codex/example")
+        self.assertNotEqual(self.finish().returncode, 0)
+        self.assert_branch_present()
+        self.assertTrue((worktree / "Makefile").is_file())
+        self.assertEqual(
+            self.git("rev-parse", "HEAD", cwd=worktree).stdout.strip(), self.feature_commit
+        )
+
+    def test_finish_treats_branch_argument_as_data(self) -> None:
+        result = self.finish('codex/no"; touch injected; #')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Invalid local branch name", result.stdout)
+        self.assertFalse((self.repository / "injected").exists())
+        self.assert_branch_present()
+
+    def test_finish_refuses_missing_branch(self) -> None:
+        result = self.finish("codex/missing")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Cannot find local branch", result.stdout)
+        self.assert_branch_present()

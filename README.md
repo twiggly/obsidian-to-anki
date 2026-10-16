@@ -335,18 +335,30 @@ What these do:
 - `make branch NAME=...`: create and switch to `codex/...`; refuses to run unless
   you are on `main`, so a new feature does not accidentally include another feature
 - `make pr`: run lint, formatting checks, and tests, then push the current branch
-  and open a draft PR with `gh`, an automatic title, and the shared PR checklist;
-  requires a clean working tree, including no
-  untracked files, so the checked code matches the committed code being pushed.
-  Uncommitted changes, a failed Git status check, a missing checklist template,
-  or a failed code check prevent both the push and PR creation
+  and create a draft PR targeting `main` with an automatic title and the shared
+  checklist, or show the existing open PR's link. Repeated runs preserve its title,
+  description, checklist, and draft/ready status. Only open PRs from the same
+  repository and branch targeting `main` are reused. A clean working tree,
+  including no untracked files, is required so the checked code matches the commit
+  being pushed. Uncommitted changes, a failed Git status check, a missing checklist
+  template, a failed code check, or a failed PR lookup prevent both the push and
+  PR creation
+- `make finish BRANCH=codex/...`: fetch and prune remote references, fast-forward
+  local `main`, and delete only the named local branch after verifying all of its
+  commits are in `origin/main`. It refuses uncommitted changes, deletion of `main`,
+  unmerged branches, and local `main` commits absent from `origin/main`. It never
+  force-deletes branches or discards changes
 
 `git add <changed-files>` means the specific files you want in the commit. Commit
 or stash unfinished changes before using `make pr`; ignored files such as `.venv`
-do not block it. Neither command commits, stashes, or discards changes for you.
+do not block it. These helpers never commit, stash, or discard changes for you.
 
 Install the optional development tools before using `make pr`. It still requires
 GitHub CLI (`gh`) and a feature branch rather than `main`.
+
+After committing more changes on a branch with an open PR, run `make pr` again to
+check and push them without creating another PR. A failed GitHub lookup stops the
+command rather than being mistaken for "no open PR".
 
 Before marking a draft ready, fill in its summary and verification checklist.
 Record relevant manual GUI checks, or mark them not applicable for changes that
@@ -355,9 +367,18 @@ GitHub also uses it for browser-created PRs once it is on the default branch.
 
 Automatic deletion of merged branches is enabled in the GitHub repository
 settings. It removes merged branches on GitHub, not local branches. After a merge,
-update local `main` with `make sync-main`, prune stale remote references with
-`git fetch --prune origin`, and remove the merged local branch with
-`git branch -d codex/your-merged-branch`.
+finish local cleanup from the merged branch or `main`:
+
+```bash
+make finish BRANCH=codex/your-merged-branch
+```
+
+This only needs Git, not GitHub CLI or the development dependencies. If fetching,
+switching to `main`, or updating `main` fails, the branch is not deleted. A branch
+checked out in another worktree is not deleted either. Squash or rebase merges
+may leave different commits on the original branch; cleanup deliberately refuses
+these when it cannot confirm ancestry. Inspect them manually instead of forcing
+deletion. The helper does not merge PRs or delete any remote branches.
 
 If you just want to see the available helper commands:
 
