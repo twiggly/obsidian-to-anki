@@ -7,7 +7,7 @@ script = "echo No setup required"
 [[actions]]
 name = "Run GUI"
 icon = "run"
-command = "python3 -m obsidian_to_anki"
+command = ".venv/bin/python -m obsidian_to_anki"
 
 [[actions]]
 name = "Run Tests"
