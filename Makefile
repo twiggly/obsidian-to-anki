@@ -10,8 +10,8 @@ help:
 		'make format-check         Check Python formatting' \
 		'make check                Run lint, formatting checks, and tests' \
 		'make sync-main            Switch to main and fast-forward from origin/main' \
-		'make branch NAME=slug     Create and switch to codex/slug' \
-		'make pr                   Run all checks, push the current branch, and open a draft PR' \
+		'make branch NAME=slug     Create and switch to codex/slug from main' \
+		'make pr                   Require committed changes, run checks, push, and open a draft PR' \
 		'Python: executable .venv/bin/python, otherwise python3.15; override with PYTHON=...'
 
 test:
@@ -37,20 +37,30 @@ branch:
 		printf '%s\n' 'Usage: make branch NAME=short-description'; \
 		exit 1; \
 	fi
-	git switch -c codex/$(NAME)
+	@branch="$$(git branch --show-current)" || exit $$?; \
+	if [ "$$branch" != "main" ]; then \
+		printf '%s\n' 'Create feature branches from main. Run make sync-main first.'; \
+		exit 1; \
+	fi; \
+	git switch -c "codex/$(NAME)"
 
 pr:
 	@if ! command -v gh >/dev/null 2>&1; then \
 		printf '%s\n' 'GitHub CLI (gh) is required for make pr.'; \
 		exit 1; \
 	fi
-	@branch="$$(git branch --show-current)"; \
+	@branch="$$(git branch --show-current)" || exit $$?; \
 	if [ -z "$$branch" ]; then \
 		printf '%s\n' 'Could not determine the current branch.'; \
 		exit 1; \
 	fi; \
 	if [ "$$branch" = "main" ]; then \
 		printf '%s\n' 'Switch to a feature branch before opening a PR.'; \
+		exit 1; \
+	fi; \
+	status="$$(git status --porcelain --untracked-files=all)" || exit $$?; \
+	if [ -n "$$status" ]; then \
+		printf '%s\n' 'Commit or stash all changes, including untracked files, before opening a PR.'; \
 		exit 1; \
 	fi; \
 	$(MAKE) check && \
