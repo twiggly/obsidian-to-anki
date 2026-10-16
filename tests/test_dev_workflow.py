@@ -31,7 +31,7 @@ class DevelopmentWorkflowTests(unittest.TestCase):
             "COMMAND_LOG": str(self.command_log),
             "TEST_BRANCH": "codex/example",
         }
-        self.write_python_stub(self.bin_directory / "python3", "fallback")
+        self.write_python_stub(self.bin_directory / "python3.15", "fallback")
         self.write_python_stub(self.bin_directory / "override-python", "override")
         self.write_stub(
             self.bin_directory / "git",
@@ -114,7 +114,9 @@ class DevelopmentWorkflowTests(unittest.TestCase):
                     if source == "environment":
                         result = self.run_make(target, PYTHON="override-python")
                     else:
-                        result = self.run_make(target, "PYTHON=override-python", PYTHON="python3")
+                        result = self.run_make(
+                            target, "PYTHON=override-python", PYTHON="python3.15"
+                        )
                     self.assert_success(result)
                     expected = (
                         self.pr_commands("override")

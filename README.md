@@ -12,11 +12,11 @@ The project supports:
 
 ## Install
 
-This project requires Python 3.14 or newer and only uses the Python standard library
+This project requires Python 3.15 or newer and only uses the Python standard library
 at runtime. The desktop UI also requires Tkinter support in your Python installation.
 
 ```bash
-python3 -m pip install .
+python3.15 -m pip install .
 ```
 
 That installs a console script named `obsidian-to-anki`.
@@ -34,13 +34,13 @@ obsidian-to-anki
 or:
 
 ```bash
-python3 main.py
+python3.15 main.py
 ```
 
 or, using the package entrypoint directly:
 
 ```bash
-python3 -m obsidian_to_anki
+python3.15 -m obsidian_to_anki
 ```
 
 The GUI flow is:
@@ -226,8 +226,8 @@ That means you can style Anki cards with CSS like:
 
 The app code now lives in the `obsidian_to_anki/` package, with:
 
-- `obsidian_to_anki/__main__.py` for `python3 -m obsidian_to_anki`
-- a small top-level `main.py` compatibility wrapper for `python3 main.py`
+- `obsidian_to_anki/__main__.py` for `python3.15 -m obsidian_to_anki`
+- a small top-level `main.py` compatibility wrapper for `python3.15 main.py`
 
 Key modules inside `obsidian_to_anki/`:
 
@@ -260,16 +260,16 @@ make test
 or:
 
 ```bash
-python3 -m unittest discover -s tests -v
+python3.15 -m unittest discover -s tests -v
 ```
 
 ## Development Checks
 
-Install the optional development tools in a virtual environment, using Python 3.14
+Install the optional development tools in a virtual environment, using Python 3.15
 or newer:
 
 ```bash
-python3 -m venv .venv
+python3.15 -m venv .venv
 .venv/bin/python -m pip install -e '.[dev]'
 ```
 
@@ -280,21 +280,21 @@ make check
 ```
 
 This runs Ruff lint checks, verifies formatting, and runs the unit tests. Ruff targets
-Python 3.14 and formats to a 100-character line length. Use `make lint` or
+Python 3.15 and formats to a 100-character line length. Use `make lint` or
 `make format-check` for individual checks, and `make format` to apply formatting.
 The app and `make test` do not require Ruff.
 
 All Python-based Make targets prefer an executable `.venv/bin/python` when present
-and otherwise use `python3` from your PATH. You do not need to activate the virtual
+and otherwise use `python3.15` from your PATH. You do not need to activate the virtual
 environment. An explicit `PYTHON` environment variable or command-line assignment
-overrides this selection, for example `make check PYTHON=python3.14`. Make does not
+overrides this selection, for example `make test PYTHON=python3.15`. Make does not
 install development tools automatically.
 
 ### Automatic GitHub Checks
 
 The Checks workflow runs on pull requests targeting `main`, pushes to `main`, and
 manual runs from GitHub Actions. It runs a single `make check` job on macOS with
-Python 3.14, matching the project's main development setup. The job installs the
+Python 3.15, matching the project's main development setup. The job installs the
 optional development dependencies and explicitly uses the selected Python version.
 
 These checks run the existing test suite without opening GUI windows or contacting

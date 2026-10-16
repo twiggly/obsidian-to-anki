@@ -7,10 +7,10 @@ name = "obsidian-to-anki"
 version = "0.1.0"
 description = "Convert Obsidian notes matching selected tags into Anki TSV cards."
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.15"
 
 [project.optional-dependencies]
-dev = ["ruff>=0.16.8,<0.17"]
+dev = ["ruff>=0.17.1,<0.18"]
 
 [project.scripts]
 obsidian-to-anki = "obsidian_to_anki.cli:main"
@@ -19,7 +19,7 @@ obsidian-to-anki = "obsidian_to_anki.cli:main"
 include = ["obsidian_to_anki*"]
 
 [tool.ruff]
-target-version = "py314"
+target-version = "py315"
 line-length = 100
 
 [tool.ruff.lint]
