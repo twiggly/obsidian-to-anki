@@ -11,7 +11,7 @@ help:
 		'make check                Run lint, formatting checks, and tests' \
 		'make sync-main            Switch to main and fast-forward from origin/main' \
 		'make branch NAME=slug     Create and switch to codex/slug from main' \
-		'make pr                   Require committed changes, run checks, push, and open a draft PR' \
+		'make pr                   Require committed changes, check, push, and open a draft PR with checklist' \
 		'Python: executable .venv/bin/python, otherwise python3.15; override with PYTHON=...'
 
 test:
@@ -63,6 +63,10 @@ pr:
 		printf '%s\n' 'Commit or stash all changes, including untracked files, before opening a PR.'; \
 		exit 1; \
 	fi; \
+	if [ ! -f .github/pull_request_template.md ] || [ ! -r .github/pull_request_template.md ]; then \
+		printf '%s\n' 'PR checklist template is missing or unreadable: .github/pull_request_template.md'; \
+		exit 1; \
+	fi; \
 	$(MAKE) check && \
 	git push -u origin "$$branch" && \
-	gh pr create --fill --draft
+	gh pr create --fill --draft --body-file .github/pull_request_template.md
