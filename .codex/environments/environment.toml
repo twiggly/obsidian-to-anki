@@ -12,4 +12,4 @@ command = ".venv/bin/python -m obsidian_to_anki"
 [[actions]]
 name = "Run Tests"
 icon = "test"
-command = "python3 -m unittest discover -s tests -q"
+command = ".venv/bin/python -m unittest discover -s tests -q"
