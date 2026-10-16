@@ -12,7 +12,8 @@ The project supports:
 
 ## Install
 
-This project only uses the Python standard library.
+This project requires Python 3.14 or newer and only uses the Python standard library
+at runtime. The desktop UI also requires Tkinter support in your Python installation.
 
 ```bash
 python3 -m pip install .
@@ -264,12 +265,12 @@ python3 -m unittest discover -s tests -v
 
 ## Development Checks
 
-Install the optional development tools in a virtual environment:
+Install the optional development tools in a virtual environment, using Python 3.14
+or newer:
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install -e '.[dev]'
+.venv/bin/python -m pip install -e '.[dev]'
 ```
 
 Run all checks before submitting changes:
@@ -279,11 +280,26 @@ make check
 ```
 
 This runs Ruff lint checks, verifies formatting, and runs the unit tests. Ruff targets
-Python 3.10 and formats to a 100-character line length. Use `make lint` or
+Python 3.14 and formats to a 100-character line length. Use `make lint` or
 `make format-check` for individual checks, and `make format` to apply formatting.
 The app and `make test` do not require Ruff.
 
-Without activating the environment, use `make check PYTHON=.venv/bin/python`.
+All Python-based Make targets prefer an executable `.venv/bin/python` when present
+and otherwise use `python3` from your PATH. You do not need to activate the virtual
+environment. An explicit `PYTHON` environment variable or command-line assignment
+overrides this selection, for example `make check PYTHON=python3.14`. Make does not
+install development tools automatically.
+
+### Automatic GitHub Checks
+
+The Checks workflow runs on pull requests targeting `main`, pushes to `main`, and
+manual runs from GitHub Actions. It runs a single `make check` job on macOS with
+Python 3.14, matching the project's main development setup. The job installs the
+optional development dependencies and explicitly uses the selected Python version.
+
+These checks run the existing test suite without opening GUI windows or contacting
+a live Anki instance. They do not replace a manual GUI smoke test or enforce branch
+protection. Superseded workflow runs are cancelled automatically.
 
 ## Branch and PR Workflow
 
@@ -304,7 +320,11 @@ What these do:
 
 - `make sync-main`: switch to `main` and fast-forward from `origin/main`
 - `make branch NAME=...`: create and switch to `codex/...`
-- `make pr`: run tests, push the current branch, and open a draft PR with `gh`
+- `make pr`: run lint, formatting checks, and tests, then push the current branch
+  and open a draft PR with `gh`; a failed check prevents both the push and PR creation
+
+Install the optional development tools before using `make pr`. It still requires
+GitHub CLI (`gh`) and a feature branch rather than `main`.
 
 If you just want to see the available helper commands:
 

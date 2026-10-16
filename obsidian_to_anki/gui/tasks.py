@@ -5,7 +5,7 @@ import traceback
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, ParamSpec, TypeVar
+from typing import TYPE_CHECKING
 
 from ..anki.sync import (
     apply_recommended_deck_settings,
@@ -37,15 +37,13 @@ if TYPE_CHECKING:
     import tkinter as tk
 
 
-_Result = TypeVar("_Result")
-_Args = ParamSpec("_Args")
 _ErrorCallback = Callable[[str, str | None], None]
 
 
-def _run_task(
-    operation: Callable[[], _Result],
+def _run_task[Result](
+    operation: Callable[[], Result],
     action: str,
-    on_success: Callable[[_Result], None],
+    on_success: Callable[[Result], None],
     on_error: _ErrorCallback,
 ) -> None:
     try:
@@ -59,20 +57,20 @@ def _run_task(
         on_success(result)
 
 
-def _on_main_thread(
+def _on_main_thread[**Args](
     root: tk.Misc,
-    callback: Callable[_Args, None],
-) -> Callable[_Args, None]:
-    def schedule(*args: _Args.args, **kwargs: _Args.kwargs) -> None:
+    callback: Callable[Args, None],
+) -> Callable[Args, None]:
+    def schedule(*args: Args.args, **kwargs: Args.kwargs) -> None:
         root.after(0, partial(callback, *args, **kwargs))
 
     return schedule
 
 
-def _start_task(
+def _start_task[**Args](
     root: tk.Misc,
-    run_callbacks: Callable[[Callable[_Args, None], _ErrorCallback], None],
-    on_success: Callable[_Args, None],
+    run_callbacks: Callable[[Callable[Args, None], _ErrorCallback], None],
+    on_success: Callable[Args, None],
     on_error: _ErrorCallback,
 ) -> None:
     worker = partial(

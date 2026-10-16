@@ -1,4 +1,4 @@
-PYTHON ?= python3
+PYTHON ?= $(if $(shell test -x .venv/bin/python && printf yes),.venv/bin/python,python3)
 
 .PHONY: help test lint format format-check check sync-main branch pr
 
@@ -11,7 +11,8 @@ help:
 		'make check                Run lint, formatting checks, and tests' \
 		'make sync-main            Switch to main and fast-forward from origin/main' \
 		'make branch NAME=slug     Create and switch to codex/slug' \
-		'make pr                   Run tests, push the current branch, and open a draft PR'
+		'make pr                   Run all checks, push the current branch, and open a draft PR' \
+		'Python: executable .venv/bin/python, otherwise python3; override with PYTHON=...'
 
 test:
 	$(PYTHON) -m unittest discover -s tests -v
@@ -52,6 +53,6 @@ pr:
 		printf '%s\n' 'Switch to a feature branch before opening a PR.'; \
 		exit 1; \
 	fi; \
-	$(MAKE) test && \
+	$(MAKE) check && \
 	git push -u origin "$$branch" && \
 	gh pr create --fill --draft
