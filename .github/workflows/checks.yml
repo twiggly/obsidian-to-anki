@@ -30,5 +30,8 @@ jobs:
           python-version: "3.15"
       - name: Install development dependencies
         run: python -m pip install '.[dev]'
+      - name: Check installed command outside the repository
+        working-directory: ${{ runner.temp }}
+        run: obsidian-to-anki --help
       - name: Run all checks
         run: make check PYTHON=python

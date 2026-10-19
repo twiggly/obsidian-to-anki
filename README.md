@@ -284,6 +284,12 @@ Python 3.15 and formats to a 100-character line length. Use `make lint` or
 `make format-check` for individual checks, and `make format` to apply formatting.
 The app and `make test` do not require Ruff.
 
+The development dependency pins Ruff to `0.17.1` so local and GitHub installations
+use the same version. Rerun the development install command above to align an
+existing environment with the pin. To update Ruff, change the pin in
+`pyproject.toml`, reinstall the development dependencies, and run `make check`
+before committing the update.
+
 All Python-based Make targets prefer an executable `.venv/bin/python` when present
 and otherwise use `python3.15` from your PATH. You do not need to activate the virtual
 environment. An explicit `PYTHON` environment variable or command-line assignment
@@ -296,6 +302,11 @@ The Checks workflow runs on pull requests targeting `main`, pushes to `main`, an
 manual runs from GitHub Actions. It runs a single `make check` job on macOS with
 Python 3.15, matching the project's main development setup. The job installs the
 optional development dependencies and explicitly uses the selected Python version.
+
+After installation, the job runs `obsidian-to-anki --help` from the runner's
+temporary directory, outside the checkout. This checks that the installed command
+and its imports work without relying on the source directory; it does not open
+the GUI or contact Anki.
 
 These checks run the existing test suite without opening GUI windows or contacting
 a live Anki instance. They do not replace a manual GUI smoke test. Superseded
